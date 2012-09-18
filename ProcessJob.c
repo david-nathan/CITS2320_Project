@@ -1,26 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-	
 
 	typedef struct {
-		int[] queueTime;
-		int[] runTime;
-		int start;
-		int streamPos;
-		int length;
-		VAR[] vars;
-	} JOB;
-	
-	typdef struct {
 		char name;
 		int value;
 	} VAR;
+	
+	typedef struct {
+		int start;
+		int streamPos;
+		int length;
+		int* queueTime;
+		int* runTime;
+		VAR* vars;
+	} JOB;
 	
 	JOB readJob(char *name) {
 		// open job file
 		FILE *f = fopen(name, "rt");
 		
+		JOB newJob;
 		int start;
 		char *line;
 		// read in the first line of the job file
@@ -28,8 +28,10 @@
 			 sscanf(line, "%d", &start);
 		} else {
 			fprintf(stderr, "Job with name %s is an empty job.\n", name);
-			return NULL;
 		}
+		
+		newJob.start = start;
+		newJob.streamPos = 0;
 		
 		// workaround to quickly calculate the number of lines in the file
 		int c;
@@ -39,8 +41,18 @@
 				count++;
 		}
 		
+		// update the length parameter, ignoring the first line of the job file
+		newJob.length = count-1;
+		
 		// close file
 		fclose(f);
 		
-		return start;
+		return newJob;
+	}
+	
+	int main(int argc, int argv[]) {
+		JOB j = readJob("job1.txt");
+		printf("start: %d, length: %d", j.start, j.length);
+	
+	
 	}
