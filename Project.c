@@ -6,8 +6,10 @@
 #define EOL    '\n'
 #define CARRIAGE_RETURN    '\r'
 
+
 const char * FCFS = "FCFS";
 const char * roundRobin = "RR";
+
 
 void DieWithUserMessage(const char *msg, const char *detail) {
     fputs(msg, stderr);
@@ -21,6 +23,13 @@ void DieWithSystemMessage(const char *msg) {
     perror(msg);
     exit(1);
 }
+
+struct JOB {
+	
+	int start;
+	char* filename;
+	
+	};
 
 int countLines(char* str_filename){
      FILE *fd = fopen(str_filename, "r");
@@ -61,5 +70,39 @@ int main(int argc, char *argv[]){
    numJobs = countLines(file);
    
    printf("Number of Jobs: %d\n", numJobs);
-    
+   
+   char* jobfile = malloc(BUFSIZ);
+   char jobfiles[numJobs][BUFSIZ];
+   struct JOB jobs[numJobs];
+   
+   FILE *fp= fopen(file, "r");
+   if(fp == NULL){ DieWithSystemMessage("Unable to open file"); } //Test that file was opened
+   
+   int n=0;
+   while(fgets(jobfile, BUFSIZ, fp) != NULL)
+   { 	
+   	 jobfile[strlen(jobfile)-1] ='\0';
+   	 strcpy(jobfiles[n],jobfile);
+   	 n++;
+   }   
+   
+   for(int i=0; i< numJobs; i++){
+   	int length = countLines(jobfiles[i]);
+   	char *buf = malloc(BUFSIZ);
+   	FILE *file = fopen(jobfiles[i], "r");
+   	fgets(buf, BUFSIZ, file);
+   	int start = atoi(buf);
+   	jobs[i].filename = jobfiles[i];
+   	jobs[i].start = start;
+   	
+	printf("File: %s, start: %d length: %d\n",jobs[i].filename, jobs[i].start, length);
+   }
+   
+   
+   
+   
+   
+   
+   
+   
 }

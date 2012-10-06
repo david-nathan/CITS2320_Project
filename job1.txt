@@ -1,7 +1,5 @@
 15
-ets
 das
-as
 asf
 sadgasd
 gasdg
