@@ -75,7 +75,13 @@ int *FCFS_sched(const struct JOB *jobs, int num_jobs){
 			 }
 			 for(int i=0; i<9; i++){
 			 printf("Token[%d]: %s\n", i, tok_str[i]);
-			 }						
+			 }
+			 
+			 if((char *p=strchr(variables, tok_str[1])) != NULL){
+			 
+			 }
+			 
+			 						
 			}
 			
 			count++;			
