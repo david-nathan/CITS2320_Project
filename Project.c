@@ -27,9 +27,71 @@ void DieWithSystemMessage(const char *msg) {
 struct JOB {
 	
 	int start;
+	int length;
 	char* filename;
 	
 	};
+	
+	
+int start_cmp(const struct JOB *j1, const struct JOB *j2){
+
+	return (int)(j1->start - j2->start);
+
+}	
+
+int *FCFS_sched(const struct JOB *jobs, int num_jobs){
+	
+	int* times = (int*)malloc(num_jobs*sizeof(int));
+	int variable_count = 0;
+	int variable_capacity = 5;
+	char *variables = malloc(variable_capacity*sizeof(char));
+	
+	
+		
+	for(int i=0; i<num_jobs; i++){	
+		char *line = malloc(BUFSIZ);
+		char joblines[jobs[i].length][BUFSIZ];
+				
+		FILE *fp = fopen(jobs[i].filename, "r");
+		
+		int line_num=0;
+		while(fgets(line, BUFSIZ, fp) != NULL){
+			strcpy(joblines[line_num],line);
+			line_num++;		
+		}
+				
+		int count =0;
+		for(int j =1; j< jobs[i].length; j++){
+			if(strncmp(joblines[j],"if", 2) == 0){			
+			 char tok_str[9][BUFSIZ];
+			 int n=0;
+			 char *token;
+			 
+			 if((token=strtok(joblines[j]," ")) != NULL){
+			 	do{
+			 	strcpy(tok_str[n], token);
+			 	n++;
+			 	}while((token=strtok(NULL," ")) != NULL);			 
+			 }
+			 for(int i=0; i<9; i++){
+			 printf("Token[%d]: %s\n", i, tok_str[i]);
+			 }						
+			}
+			
+			count++;			
+		}
+		
+		times[i] = count;
+		free(line);			
+		fclose(fp);
+		}
+	int *p = &(times[0]);
+	
+		
+	return p;
+}
+	
+	
 
 int countLines(char* str_filename){
      FILE *fd = fopen(str_filename, "r");
@@ -79,7 +141,7 @@ int main(int argc, char *argv[]){
    if(fp == NULL){ DieWithSystemMessage("Unable to open file"); } //Test that file was opened
    
    int n=0;
-   while(fgets(jobfile, BUFSIZ, fp) != NULL)
+    while(fgets(jobfile, BUFSIZ, fp) != NULL)
    { 	
    	 jobfile[strlen(jobfile)-1] ='\0';
    	 strcpy(jobfiles[n],jobfile);
@@ -93,13 +155,20 @@ int main(int argc, char *argv[]){
    	fgets(buf, BUFSIZ, file);
    	int start = atoi(buf);
    	jobs[i].filename = jobfiles[i];
+   	jobs[i].length = length;
    	jobs[i].start = start;
-   	
-	printf("File: %s, start: %d length: %d\n",jobs[i].filename, jobs[i].start, length);
-   }
+   	free(buf);
+   }   
+      
+   qsort(jobs, numJobs, sizeof(struct JOB), (int(*)(const void*,const void*))start_cmp); //Orders the Array according to start time
    
+   int *jobtimes = FCFS_sched(jobs, numJobs);
+      
+      for(int i =0; i<numJobs; i++){
+   printf("File: %s, start: %d time: %d\n",jobs[i].filename, jobs[i].start, jobtimes[i]);   
+         }
    
-   
+   free(jobfile);
    
    
    

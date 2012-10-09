@@ -2,7 +2,7 @@
 das
 asf
 sadgasd
-gasdg
+if i < 3 i = i+1 goto 4
 1231   qw  qdadsads asa sa  as
 adsgas
 gda
