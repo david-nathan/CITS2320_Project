@@ -18,6 +18,8 @@ void DieWithUserMessage(const char *msg, const char *detail) {
     fputc('\n', stderr);
     exit(1);
 }
+    
+
 
 void DieWithSystemMessage(const char *msg) {
     perror(msg);
@@ -36,18 +38,14 @@ struct JOB {
 int start_cmp(const struct JOB *j1, const struct JOB *j2){
 
 	return (int)(j1->start - j2->start);
-
-}	
+}
 
 int *FCFS_sched(const struct JOB *jobs, int num_jobs){
 	
 	int* times = (int*)malloc(num_jobs*sizeof(int));
 	int variable_count = 0;
-	int variable_capacity = 5;
-	char *variables = malloc(variable_capacity*sizeof(char));
+	char *variables = malloc(sizeof(char));
 	
-	
-		
 	for(int i=0; i<num_jobs; i++){	
 		char *line = malloc(BUFSIZ);
 		char joblines[jobs[i].length][BUFSIZ];
@@ -68,29 +66,37 @@ int *FCFS_sched(const struct JOB *jobs, int num_jobs){
 			 char *token;
 			 
 			 if((token=strtok(joblines[j]," ")) != NULL){
-			 	do{
-			 	strcpy(tok_str[n], token);
-			 	n++;
-			 	}while((token=strtok(NULL," ")) != NULL);			 
-			 }
+			 	do {                    
+			 	 strcpy(tok_str[n], token);
+			 	 n++;
+			 	} while((token=strtok(NULL," ")) != NULL);
+             }
+			 
 			 for(int i=0; i<9; i++){
 			 printf("Token[%d]: %s\n", i, tok_str[i]);
 			 }
-			 
-			 if((char *p=strchr(variables, tok_str[1])) != NULL){
-			 
-			 }
-			 
-			 						
-			}
-			
+                char *p;
+                
+			 if((p=strchr(variables, (int)(tok_str[1][0]))) != NULL){
+                 
+			 } else {
+                 
+                 strcat(variables, tok_str[1]);
+                 strcat(variables, "0 ");
+                 variable_count++;
+                 
+                 printf("Variables: %s\n", variables);
+             }
+                
+            }
+        
 			count++;			
-		}
+    }
 		
 		times[i] = count;
 		free(line);			
 		fclose(fp);
-		}
+}
 	int *p = &(times[0]);
 	
 		
