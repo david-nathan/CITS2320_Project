@@ -1,39 +1,27 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>    
+#include <string.h>  
+
+#include "Project.h"  
 
 #define EOL    '\n'
 #define CARRIAGE_RETURN    '\r'
-#define MAXVARS 10
-#define MAXJOBS 10
+
+
 
 extern char *strdup(const char *);
+extern void enqueueJOBQ(JOB element, JOBQ *q);
+extern JOBQ *newJOBQ(int size);
 
 const char * FCFS = "FCFS";
 const char * roundRobin = "RR";
-
-typedef struct {
-    
-	int jobID;
-	int start;
-    int currentline;
-	int length;
-    int num_vars;
-    char *vars[MAXVARS];
-    int var_values[MAXVARS];
-	char* filename;
-	
-}JOB;
-
-
-
-
 
 
 /*---GLOBALS---*/
 
 JOB jobList[MAXJOBS];
+JOBQ *todoJobs;
 
 
 /*---HELPER FUNCTIONS---*/
@@ -136,7 +124,7 @@ void loadJobFiles(char* file) {
         
         trimLine(jobFile); 
         FILE *fpJob = fopen(jobFile, "r");
-        
+       
         if(fpJob == NULL){
             DieWithSystemMessage("Unable to open Job file");
         }
@@ -148,10 +136,12 @@ void loadJobFiles(char* file) {
         newJob.currentline = 1;
         newJob.num_vars = 0;
         newJob.jobID = jobID;
+        
         newJob.filename = strdup(jobFile);
         
         while (fgets(buffer, sizeof(buffer), fpJob) != NULL) {
-            trimLine(buffer);
+             trimLine(buffer);
+           
             if(linecount == 0){
                 newJob.start = atoi(buffer);
                 linecount++;
@@ -164,14 +154,18 @@ void loadJobFiles(char* file) {
         
         newJob.length = linecount - 1;
         
-        //TODO: Add to Queue
-        jobList[jobID] = newJob;
+        //Add to Job to queue of Jobs
+        enqueueJOBQ(newJob, todoJobs);
+       
+        printf("NEWJOB Q'd: %s\n", newJob.filename);
+       
         jobID++;
-        fclose(fpJob);
+        
+       fclose(fpJob);
+      
         
     }
-     
-    printf("JOBID: %d\n", jobID);
+    
 }
 
 void simulate(char* file, char* sched, int timeQuant){
@@ -181,6 +175,8 @@ void simulate(char* file, char* sched, int timeQuant){
 
 
 int main(int argc, char *argv[]){
+
+    todoJobs = newJOBQ(MAXJOBS);
     
     if(argc < 3 || argc > 4){//Test for correct number of arguments
     DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
@@ -201,13 +197,13 @@ int main(int argc, char *argv[]){
         timeQuant = 1;
     }
     }
-    
+ 
     simulate(file, sched, timeQuant);
-    for(int i = 0; i < MAXJOBS; i++){
-        printf("JOB: %s\n", jobList[i].filename);
-    }
         
+    
+    printf("Number of JOBs: %d\n", todoJobs->nElements);  
         
+
     
    
    
