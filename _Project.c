@@ -8,6 +8,7 @@
 #define MAXVARS 10
 #define MAXJOBS 10
 
+extern char *strdup(const char *);
 
 const char * FCFS = "FCFS";
 const char * roundRobin = "RR";
@@ -147,7 +148,7 @@ void loadJobFiles(char* file) {
         newJob.currentline = 1;
         newJob.num_vars = 0;
         newJob.jobID = jobID;
-        strcpy(newJob.filename, jobFile);
+        newJob.filename = strdup(jobFile);
         
         while (fgets(buffer, sizeof(buffer), fpJob) != NULL) {
             trimLine(buffer);
@@ -164,12 +165,13 @@ void loadJobFiles(char* file) {
         newJob.length = linecount - 1;
         
         //TODO: Add to Queue
-        
+        jobList[jobID] = newJob;
         jobID++;
         fclose(fpJob);
         
     }
-    
+     
+    printf("JOBID: %d\n", jobID);
 }
 
 void simulate(char* file, char* sched, int timeQuant){
@@ -201,6 +203,9 @@ int main(int argc, char *argv[]){
     }
     
     simulate(file, sched, timeQuant);
+    for(int i = 0; i < MAXJOBS; i++){
+        printf("JOB: %s\n", jobList[i].filename);
+    }
         
         
     
