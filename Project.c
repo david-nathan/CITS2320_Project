@@ -17,6 +17,7 @@ extern JOBQ *newJOBQ(int size);
 extern bool isEmptyJOBQ(JOBQ *q);
 extern JOB peekJOBQ(JOBQ *q);
 extern JOB dequeueJOBQ(JOBQ *q);
+extern void sortJOBQ(JOBQ *q);
 
 const char * FCFS = "FCFS";
 const char * roundRobin = "RR";
@@ -30,6 +31,8 @@ JOB jobList[MAXJOBS];
 /* Queue of t */
 JOBQ *todoJobs;
 JOBQ *readyJobs;
+
+PAGETABLE pagetables[MAXJOBS];
 
 /*---HELPER FUNCTIONS---*/
 void DieWithUserMessage(const char *msg, const char *detail) {
@@ -166,6 +169,8 @@ void loadJobFiles(char* file, MEMORY harddrive) {
                 harddrive.frames[hdFrameCount] = page;
                 
                 //TODO: Page table
+                pagetables[jobID].pageIndex[linecount] = pagecount;
+                pagetables[jobID].hdd_frameIndex[pagecount] = hdFrameCount;
                 
                 pagecount++;
                 hdFrameCount++;
@@ -173,6 +178,9 @@ void loadJobFiles(char* file, MEMORY harddrive) {
                 //Even line number
                 harddrive.frames[hdFrameCount - 1].data[1] = strdup(buffer);
                 //TODO: Page table
+                pagetables[jobID].pageIndex[linecount] = pagecount-1;
+                
+                printf("Stored data '%s' in pagecount %d in HDD frame %d\n",buffer, pagecount - 1, hdFrameCount-1);
             }
             
             linecount++;
@@ -192,6 +200,8 @@ void loadJobFiles(char* file, MEMORY harddrive) {
         
     }
     
+    sortJOBQ(todoJobs);
+    
 }
 
 void simulateNoMemory(char* file, char* sched, int timeQuant){
@@ -205,7 +215,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
     
     int time = 1;
     int count = 0;
-    
+    bool rrUp = false; 
     
     while(!isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs)){
         
@@ -213,27 +223,52 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
             JOB newJob = dequeueJOBQ(todoJobs);
             jobList[newJob.jobID] = newJob;
             enqueueJOBQ(newJob, readyJobs);
-            printf("~~~~~~~~~~New process pid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
+            printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
         }
         
         //IDLE if no ready jobs
         if(isEmptyJOBQ(readyJobs)) {
             time++;
+            continue;
         }
         
         //Fetch Next Job
-        int jid = peekJOBQ(readyJobs).start;
+        int jid = peekJOBQ(readyJobs).jobID;
         JOB *j = &jobList[jid];
         
         //If Job is finished
         if(j->currentline == j->length){
             dequeueJOBQ(readyJobs);
             count = 0;
+            continue;
         }
         
+        //Check for RR schedule
+        if(sched == roundRobin && rrUp){
+            JOB next = dequeueJOBQ(readyJobs);
+            enqueueJOBQ(next, readyJobs);
+            count = 0;
+            rrUp = false;
+            continue;
+        }
+         
+        //PROCESS line from HDD
+        int pagenum = pagetables[jid].pageIndex[j->currentline];
+        int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
+        PAGE current_page = harddrive.frames[hdd_framenum];
+        char* line = current_page.data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
+        processSingleLine(line, jid);
+        time++;
+        count++;
         
+        //Check for timequantum
+        if(count = timeQuant && j->currentline != j->length){
+            rrUp = true;
+         }
     }
     
+    
+    free(harddrive.frames);
     
 }
 

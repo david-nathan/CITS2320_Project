@@ -74,3 +74,4 @@ int compareStartTimes(const void *j1, const void *j2) {
 void sortJOBQ(JOBQ *q) {
     qsort(q->elements, q->nElements, sizeof (JOB), compareStartTimes);
 }
+

@@ -36,6 +36,16 @@ typedef struct {
 } PAGE;
 
 
+typedef struct {
+
+    int pageIndex[MAX_JOB_LENGTH];
+    
+    int hdd_frameIndex[MAX_PAGES];
+
+
+} PAGETABLE;
+
+
 /* Represents physical memory: RAM, CACHE or HDD*/
 typedef struct {
     /*count of frames in this memory*/
