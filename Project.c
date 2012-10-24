@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <string.h>  
 
-#include "Project.h"  
+#include "Project.h"
 
 #define EOL    '\n'
 #define CARRIAGE_RETURN    '\r'
@@ -285,36 +285,36 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	
 	MEMORY disk;
 	// allocate the disk size according to the number of jobs and their max length (in lines)
-	disk.size = MAX_PAGES;
+	disk.num_frames = MAX_PAGES;
 	// no cost, however a page fault is caused on access, and can only transfer to ram
-	disk.cost = 0;
-	disk.frame = calloc(disk.size, sizeof(PAGE));
+	disk.accessCost = 0;
+	disk.frames = calloc(disk.num_frames, sizeof(PAGE));
 	// allocate space, although in this simulation this array will not be necessary
-	disk.lastAccessed = calloc(disk.size, sizeof(int));
+	disk.LRU = calloc(disk.num_frames, sizeof(int));
 	
 	// now that the memory objects have been created, store the job files on the disk
 	loadJobFiles(file, disk);
 	
 	MEMORY ram;
 	// always 8 frames for this project
-	ram.size = 8;
-	ram.cost = 2;
-	ram.frame = calloc(ram.size, sizeof(PAGE));
-	ram.lastAccessed = calloc(ram.size, sizeof(int));
+	ram.num_frames = 8;
+	ram.accessCost = 2;
+	ram.frames = calloc(ram.num_frames, sizeof(PAGE));
+	ram.LRU = calloc(ram.num_frames, sizeof(int));
 	
-	/* Note: no allocation for LRU (lastAccessed) for this MEMORY object, as it will not be used */
+	/* Note: no allocation for LRU (LRU) for this MEMORY object, as it will not be used */
 	MEMORY cache;
 	// always 2 frames for this project
-	cache.size = 2;
-	cache.cost = 1;
-	cache.frame = calloc(cache.size, sizeof(PAGE));
+	cache.num_frames = 2;
+	cache.accessCost = 1;
+	cache.frames = calloc(cache.num_frames, sizeof(PAGE));
 	// allocate space, although in this simulation this array will not be necessary
-	cache.lastAccessed = calloc(cache.size, sizeof(int));
+	cache.LRU = calloc(cache.num_frames, sizeof(int));
 	
 	// initialise the page table
-	PAGE_TABLE table;
-	table.RAMFrame = calloc(MAX_PAGES, sizeof(int));
-	table.cacheFrame = calloc(MAX_PAGES, sizeof(int));
+	PAGETABLE table;
+	//table.RAMFrame = calloc(MAX_PAGES, sizeof(int));
+	//table.cacheFrame = calloc(MAX_PAGES, sizeof(int));
 	
 	// initialise a parameter to keep track of the time throughout the simulation
 	int time = 0;
@@ -324,24 +324,27 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	JOB j;
 	
 	// keeping looping as long as at least one job remains (whether it has begun execution or not)
-	while( !isEmpty(todoJobs) || !isEmpty(readyJobs) ) {		
+	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {		
 		// enqueue new jobs due to start at this time (if such jobs exist)
-		while( !isEmpty(todoJobs) && (peek(todoJobs).start == time) ) {
-			enqueueJOBQ(todoJobs.dequeueJOBQ(),readyJobs);
+		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
+			enqueueJOBQ(dequeueJOBQ(todoJobs),readyJobs);
 		}
 		// if there are no jobs to process, increment time and restart loop
-		if( isEmpty(readyJobs) ) {
+		if( isEmptyJOBQ(readyJobs) ) {
 			time++;
 			continue;
 		}
 	
 		// PROCESS AS FCFS
-		if( !RR ) {
+		
+		//TODO
+		/*if( !RR ) {
 			j = peekJOBQ(readyJobs);
-			int line = j.currentLine;
+			int line = j.currentline;
 			
 			// check if the line is already in cache
 			if( cacheFrame[ ********* ] != -1) {
+			      
 				processLineFromCache(cacheFrame[ ******** ] ,j);
 				// cost of processing from cache is 1
 				time++;
@@ -349,19 +352,21 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			
 			// check if in RAM
 			if( RAMFrame[ ********* ] != -1) {
+			        
 				processLineFromRAM(RAMFrame [ ********* ] , j);
 				// cost of filling cache and processing line is 2
 				time += 2;
 			}
 			
 			// if not in cache or RAM, page fault, need to load a page from disk
+			
 			loadPageToRAM( ********* , RAM, j);
 			
 			
 		}		else		{
 		// ELSE PROCESS AS RR
 			
-		}
+		} */
 	
 	
 		// time increment should only occur here when initially running with no jobs in readyJobs queue

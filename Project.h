@@ -41,6 +41,11 @@ typedef struct {
     int pageIndex[MAX_JOB_LENGTH];
     
     int hdd_frameIndex[MAX_PAGES];
+    
+    // the frame of a PAGE in RAM, or -1 if the PAGE is not in RAM
+    int RAMFrame[MAX_PAGES];
+    // the frame of a PAGE in cache, or -1 if the page is not in cache
+    int cacheFrame[MAX_PAGES];
 
 
 } PAGETABLE;
