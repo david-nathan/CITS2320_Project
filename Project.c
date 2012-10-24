@@ -168,19 +168,19 @@ void loadJobFiles(char* file, MEMORY harddrive) {
                 //add page to harddrive
                 harddrive.frames[hdFrameCount] = page;
                 
-                //TODO: Page table
+                // update page table
                 pagetables[jobID].pageIndex[linecount] = pagecount;
                 pagetables[jobID].hdd_frameIndex[pagecount] = hdFrameCount;
+                pagetables[jobID].RAMFrame[pagecount] = -1;
+                pagetables[jobID].cacheFrame[pagecount] =  -1;
                 
                 pagecount++;
                 hdFrameCount++;
             } else {
                 //Even line number
                 harddrive.frames[hdFrameCount - 1].data[1] = strdup(buffer);
-                //TODO: Page table
+
                 pagetables[jobID].pageIndex[linecount] = pagecount-1;
-                
-                printf("Stored data '%s' in pagecount %d in HDD frame %d\n",buffer, pagecount - 1, hdFrameCount-1);
             }
             
             linecount++;
@@ -190,9 +190,7 @@ void loadJobFiles(char* file, MEMORY harddrive) {
         
         //Add to Job to queue of Jobs
         enqueueJOBQ(newJob, todoJobs);
-       
-        printf("NEWJOB Q'd: %s\n", newJob.filename);
-       
+              
         jobID++;
         
        fclose(fpJob);
@@ -383,26 +381,42 @@ int main(int argc, char *argv[]){
     DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
     }
     
-    char* sched = argv[1]; //Type of schedule 
-    char* file = argv[2]; //Name of file that contains jobs
+    
+    
     int timeQuant;        //Time quantum for RR scheduling
     int numJobs;          //Number of Jobs
+    char* sched;          //Type of schedule 
+    char* file;           //Name of file that contains jobs
     
-    if(strcmp(sched, roundRobin) == 0){ 
-       if(argc == 3){//Test for correct number of arguments for RR
-        DieWithUserMessage("Parameter(s)", "<Time Quantum>");
-        }       
-        timeQuant = atoi(argv[3]); //Set time quantum
-    } else { 
+    if(argc==3){
+     sched = argv[1];         
+        if(strcmp(sched, roundRobin) == 0){ 
+              DieWithUserMessage("Parameter(s)", "<Time Quantum>");
+           }            
         if(strcmp(sched, FCFS) == 0){
-        timeQuant = 1;
+          file = argv[2]; 
+          timeQuant = 1;
+               } else {
+             DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+             }      
     }
-    }
- 
+    
+    if(argc==4){
+      sched = argv[1];                      //Type of schedule 
+        if(strcmp(sched, roundRobin) == 0){  
+            timeQuant = atoi(argv[2]);      //Set time quantum
+            file = argv[3];                 //Name of file that contains jobs           
+          }else{
+             DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+          }        
+        }
+    
+    
+    
     simulateNoMemory(file, sched, timeQuant);
         
     
-    printf("Number of JOBs: %d\n", todoJobs->nElements);  
+    
         
 
     
