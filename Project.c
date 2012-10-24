@@ -272,6 +272,102 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
     
 }
 
+void simulateWithMemory(char* file, char* sched, int timeQuant){
+	// bool to state whether this is a RR or FCFS simulation
+	bool RR;
+	
+	// timeQuant should be -1 if not RR
+	if(timeQuant == -1) {
+		RR = false;
+	} else {
+		RR = true;
+	}
+	
+	MEMORY disk;
+	// allocate the disk size according to the number of jobs and their max length (in lines)
+	disk.size = MAX_PAGES;
+	// no cost, however a page fault is caused on access, and can only transfer to ram
+	disk.cost = 0;
+	disk.frame = calloc(disk.size, sizeof(PAGE));
+	// allocate space, although in this simulation this array will not be necessary
+	disk.lastAccessed = calloc(disk.size, sizeof(int));
+	
+	// now that the memory objects have been created, store the job files on the disk
+	loadJobFiles(file, disk);
+	
+	MEMORY ram;
+	// always 8 frames for this project
+	ram.size = 8;
+	ram.cost = 2;
+	ram.frame = calloc(ram.size, sizeof(PAGE));
+	ram.lastAccessed = calloc(ram.size, sizeof(int));
+	
+	/* Note: no allocation for LRU (lastAccessed) for this MEMORY object, as it will not be used */
+	MEMORY cache;
+	// always 2 frames for this project
+	cache.size = 2;
+	cache.cost = 1;
+	cache.frame = calloc(cache.size, sizeof(PAGE));
+	// allocate space, although in this simulation this array will not be necessary
+	cache.lastAccessed = calloc(cache.size, sizeof(int));
+	
+	// initialise the page table
+	PAGE_TABLE table;
+	table.RAMFrame = calloc(MAX_PAGES, sizeof(int));
+	table.cacheFrame = calloc(MAX_PAGES, sizeof(int));
+	
+	// initialise a parameter to keep track of the time throughout the simulation
+	int time = 0;
+	// keep track of how long the current job has been executing (for Round Robin)
+	int count = 0;
+	// keep a variable for the current job
+	JOB j;
+	
+	// keeping looping as long as at least one job remains (whether it has begun execution or not)
+	while( !isEmpty(todoJobs) || !isEmpty(readyJobs) ) {		
+		// enqueue new jobs due to start at this time (if such jobs exist)
+		while( !isEmpty(todoJobs) && (peek(todoJobs).start == time) ) {
+			enqueueJOBQ(todoJobs.dequeueJOBQ(),readyJobs);
+		}
+		// if there are no jobs to process, increment time and restart loop
+		if( isEmpty(readyJobs) ) {
+			time++;
+			continue;
+		}
+	
+		// PROCESS AS FCFS
+		if( !RR ) {
+			j = peekJOBQ(readyJobs);
+			int line = j.currentLine;
+			
+			// check if the line is already in cache
+			if( cacheFrame[ ********* ] != -1) {
+				processLineFromCache(cacheFrame[ ******** ] ,j);
+				// cost of processing from cache is 1
+				time++;
+			}
+			
+			// check if in RAM
+			if( RAMFrame[ ********* ] != -1) {
+				processLineFromRAM(RAMFrame [ ********* ] , j);
+				// cost of filling cache and processing line is 2
+				time += 2;
+			}
+			
+			// if not in cache or RAM, page fault, need to load a page from disk
+			loadPageToRAM( ********* , RAM, j);
+			
+			
+		}		else		{
+		// ELSE PROCESS AS RR
+			
+		}
+	
+	
+		// time increment should only occur here when initially running with no jobs in readyJobs queue
+		time++;
+	}
+}
 
 int main(int argc, char *argv[]){
 
