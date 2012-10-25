@@ -38,9 +38,9 @@ typedef struct {
 
 
 typedef struct {
-
+	// get the page index of a given line
     int pageIndex[MAX_JOB_LENGTH];
-    
+    // get the hdd frame index of a given page
     int hdd_frameIndex[MAX_PAGES];
     
     // the frame of a PAGE in RAM, or -1 if the PAGE is not in RAM
