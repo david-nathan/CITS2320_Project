@@ -337,25 +337,25 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			processSingleLine(line, jid);
 			
 			// check if the line is already in cache
-			if( cacheFrame[ hdd_framenum ] != -1) {
+			if( pagetables[jid].cacheFrame[ hdd_framenum ] != -1) {
 			      
-				processLineFromCache(cacheFrame[ hdd_framenum ], line, jid);
-				// cost of processing from cache is 1
-				time++;
+				processLineFromCache(pagetables[jid].cacheFrame[ hdd_framenum ], cache, jid);
+				// cost of processing from cache is 1 in the case of this project
+				time += cache->accessCost;
 				continue;
 			}
 			
 			// check if in RAM
-			if( RAMFrame[ hdd_framenum ] != -1) {
+			if( pagetables[jid].RAMFrame[ hdd_framenum ] != -1) {
 			    
-				processLineFromRAM(RAMFrame[ hdd_framenum ], ram, cache, jid);
-				// cost of filling cache and processing line is 2
-				time += 2;
+				processLineFromRAM(pagetables[jid].RAMFrame[ hdd_framenum ], ram, cache, jid);
+				// cost of filling cache and processing line is 2 in the case of this project
+				time += ram->accessCost;
 				continue;
 			}
 			
-			// if not in cache or RAM, page fault, need to load a page from disk
-			loadPageToRAM(hdd_framenum, harddisk, ram, jid);
+			// load the page from disk to ram
+			loadPageToRAM(hdd_framenum, harddisk, ram, &harddisk->frames[hdd_framenum]);
 			
 			
 			
@@ -374,34 +374,43 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 /*
  * Process one line from the cache.
  */
-void processLineFromCache(int cacheFrame, char *line, int jid) {
-	
+void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
+	// determine if the line to be processed is an even or odd line
+	int line = jobList[jid].currentline % 2;
+	char *data = & (cache->frames[cacheFrame]->data[line]);
+	processSingleLine(data,jid);
 }
 
 /*
- * Load two pages from ram to cache and process the first line in the first page.
+ * Load two pages from ram to cache and process the first line in the first page. If
+ * there is only one page page of this job in ram, this will cause a page fault and
+ * return false, but will load the second page into ram from disk.
  */
-void processLineFromRAM(int RAMFrame, MEMORY *ram, MEMORY *cache, int jid) {
+bool processLineFromRAM(MEMORY *ram, MEMORY *cache, int jid) {
+	// find the next page to be processed (since we need to move TWO pages to cache)
+	int nextLine = jobList[jid].currentline + 2;
+	int nextPage = pagetables[jid].pageIndex[nextLine];
 	
+	// if the next page is not in ram, page fault
+	if( pagetables[jid].RAMFrame[nextPage] == -1 ) {
+		loadPageToRAM(ram, 
+	}
 }
 
 /*
  * Load one page from harddisk to ram, evicting the least recently used (LRU) frame
  * from ram in order to free up space.
  */
-void loadPageToRAM(int HDDFrame, MEMORY *harddisk, MEMORY *ram, int jid) {
+void loadPageToRAM(MEMORY *ram, PAGE *p, int jid) {
 	// find the page number that must be removed from ram
 	int lru = ram->LRU[0];
 	int evictedPage = ram->frames[lru]->page_number;
 	
-	// remove this page
-	pagetables[jid].RAMFrame[evictedPage] = -1;
-	
-	// find next page to be loaded
-	int newPage = hdd_frameIndex[pagetables[jid].pageIndex[jobList[jid].currentline]];
+	// remove this page **************** this currently does not find the correct jid for the evicted page **************************************
+	pagetables[ ******* ].RAMFrame[evictedPage] = -1;
 	
 	// add the new page and its associated lines to ram
-	ram->frames[lru] = &harddisk->frames[newPage];
+	ram->frames[lru] = p;
 	// update page table to reflect change
 	pagetables[jid].RAMFrame[newPage] = lru;
 	
