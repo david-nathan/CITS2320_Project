@@ -275,7 +275,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	bool RR;
 	
 	// timeQuant should be -1 if not RR
-	if(timeQuant == -1) {
+	if(timeQuant == 1) {
 		RR = false;
 	} else {
 		RR = true;
@@ -296,7 +296,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	cache = initialiseMemory(1,2);
 	
 	// initialise a parameter to keep track of the time throughout the simulation
-	int time = 0;
+	int time = 1;
 	// keep track of how long the current job has been executing (for Round Robin)
 	int count = 0;
 	// keep a variable for the current job and job id
@@ -306,8 +306,17 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {		
 		// enqueue new jobs due to start at this time (if such jobs exist)
 		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
-			enqueueJOBQ(dequeueJOBQ(todoJobs),readyJobs);
+			JOB newJob = dequeueJOBQ(todoJobs);
+			enqueueJOBQ(newJob,readyJobs);
+			
+			// load the first two pages (four lines) from disk to ram
+			for(int i=0; i<2; i++) {
+				int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentLine + 2*i];
+				int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
+				loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
+			}
 		}
+		
 		// if there are no jobs to process, increment time and restart loop
 		if( isEmptyJOBQ(readyJobs) ) {
 			time++;
@@ -330,43 +339,50 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 		//TODO
 		if( !RR ) {
 			//PROCESS line from HDD
+			int pagenum = pagetables[jid].pageIndex[j->currentLine];
+			int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
 			PAGE *current_page = getPage(harddrive, jid, j->currentLine];
 			char* line = current_page->data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
-			processSingleLine(line, jid);
 			
+			int frame;
 			// check if the line is already in cache
-			if( pagetables[jid].cacheFrame[ hdd_framenum ] != -1) {
+			if( (frame = pagetables[jid].cacheFrame[ hdd_framenum ]) != -1) {
 			      
-				processLineFromCache(pagetables[jid].cacheFrame[ hdd_framenum ], cache, jid);
+				processLineFromCache( frame, cache, jid);
 				// cost of processing from cache is 1 in the case of this project
 				time += cache->accessCost;
 				continue;
 			}
 			
 			// check if in RAM
-			if( (int frame = pagetables[jid].RAMFrame[ hdd_framenum ]) != -1) {
-
-				processLineFromRAM(harddrive, ram, cache, jid, frame);
-				// cost of filling cache and processing line is 2 in the case of this project
-				time += ram->accessCost;
-				continue;
+			if( (frame = pagetables[jid].RAMFrame[ hdd_framenum ]) != -1) {
+				
+				// if process from ram was successful, increment time
+				if( processLineFromRAM(harddrive, ram, cache, jid, frame) ) {
+					// cost of filling cache and processing line is 2 in the case of this project
+					time += ram->accessCost;
+					continue;
+					
+				// otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
+				} else {
+					continue;
+				}
 			}
 			
 			// load the page from disk to ram
 			loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
 			
-			
-			
-			
 		}		else		{
 		// ELSE PROCESS AS RR
 			
 		}
-	
-	
-		// time increment should only occur here when initially running with no jobs in readyJobs queue
-		time++;
+		
 	}
+	
+	free(ram);
+	free(cache);
+	free(harddrive);
+	
 }
 
 PAGE *getPage(MEMEORY* harddrive, int jid, int line) {
@@ -380,7 +396,7 @@ PAGE *getPage(MEMEORY* harddrive, int jid, int line) {
  */
 void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
 	// determine if the line to be processed is an even or odd line
-	int line = jobList[jid].currentline % 2;
+	int line = (jobList[jid].currentline + 1) % 2;
 	char *data = & (cache->frames[cacheFrame]->data[line]);
 	processSingleLine(data,jid);
 }
@@ -398,7 +414,7 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 	// find the next page to be processed (since we need to move TWO pages to cache)
 	int nextLine;
 	int nextPage;
-	if(jobList[jid].currentline % 2 == 0) {
+	if( (jobList[jid].currentline + 1) % 2 == 0) {
 		nextLine = line + 1;
 	} else {
 		nextLine = line + 2;
