@@ -330,10 +330,8 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 		//TODO
 		if( !RR ) {
 			//PROCESS line from HDD
-			int pagenum = pagetables[jid].pageIndex[j->currentline];
-			int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
-			PAGE current_page = harddrive.frames[hdd_framenum];
-			char* line = current_page.data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
+			PAGE *current_page = getPage(harddrive, jid, j->currentLine];
+			char* line = current_page->data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
 			processSingleLine(line, jid);
 			
 			// check if the line is already in cache
@@ -346,16 +344,16 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			}
 			
 			// check if in RAM
-			if( pagetables[jid].RAMFrame[ hdd_framenum ] != -1) {
-			    
-				processLineFromRAM(pagetables[jid].RAMFrame[ hdd_framenum ], ram, cache, jid);
+			if( (int frame = pagetables[jid].RAMFrame[ hdd_framenum ]) != -1) {
+
+				processLineFromRAM(harddrive, ram, cache, jid, frame);
 				// cost of filling cache and processing line is 2 in the case of this project
 				time += ram->accessCost;
 				continue;
 			}
 			
 			// load the page from disk to ram
-			loadPageToRAM(hdd_framenum, harddisk, ram, &harddisk->frames[hdd_framenum]);
+			loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
 			
 			
 			
@@ -371,6 +369,12 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	}
 }
 
+PAGE *getPage(MEMEORY* harddrive, int jid, int line) {
+	int pagenum = pagetables[jid].pageIndex[line];
+	int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
+	return &harddrive.frames[hdd_framenum];
+}
+
 /*
  * Process one line from the cache.
  */
@@ -384,16 +388,78 @@ void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
 /*
  * Load two pages from ram to cache and process the first line in the first page. If
  * there is only one page page of this job in ram, this will cause a page fault and
- * return false, but will load the second page into ram from disk.
+ * return false, but will load the second page into ram from disk. If there is only
+ * on page of the job remaining, it will be loaded into the cache and true will be
+ * return (as no page fault will be generated).
  */
-bool processLineFromRAM(MEMORY *ram, MEMORY *cache, int jid) {
+bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, int frame) {
+	// the current line (defined for conciseness)
+	int line = jobList[jid].currentline;
 	// find the next page to be processed (since we need to move TWO pages to cache)
-	int nextLine = jobList[jid].currentline + 2;
-	int nextPage = pagetables[jid].pageIndex[nextLine];
+	int nextLine;
+	int nextPage;
+	if(jobList[jid].currentline % 2 == 0) {
+		nextLine = line + 1;
+	} else {
+		nextLine = line + 2;
+	}
+	// set nextPage to reflect the index of the next page, or -1 if there is no next page
+	if(nextLine <= jobList[jid].length;) {
+		nextPage = pagetables[jid].pageIndex[nextLine];
+	} else {
+		nextPage = -1;
+	}
 	
-	// if the next page is not in ram, page fault
-	if( pagetables[jid].RAMFrame[nextPage] == -1 ) {
-		loadPageToRAM(ram, 
+	// if there is a next page for this job and it is not in ram, page fault
+	if( nextPage != -1 && pagetables[jid].RAMFrame[nextPage] == -1 ) {
+		PAGE *p = getPage(harddrive,jid,nextLine);
+		loadPageToRAM(ram, p, jid);
+		return false;
+		
+	// if the next line is beyond the length of the job, allow one page to be moved to cache
+	} else if ( nextPage == -1 ) {
+		// delete previous page from cache
+		removeFromCache(cache,frame);
+		// arbitrarily move the current page it to the first frame in cache
+		PAGE *p = getPage(harddrive,jid,line);
+		cache->frames[0] = *p;
+		pagetables[jid].cacheFrame[p->page_number] = 0;
+		// update the LRU array in RAM
+		updateLRU(ram,frame);
+		
+	// otherwise move the next two pages to cache (this is the expected case)
+	} else {
+		// remove the previous pages
+		removeFromCache(cache,0);
+		removeFromCache(cache,1);
+		
+		PAGE *p1 = getPage(harddrive,jid,line);
+		PAGE *p2 = getPage(harddrive,jid,nextLine);
+		cache->frames[0] = *p1;
+		cache->frames[1] = *p2;
+		pagetables[jid].cacheFrame[p1->page_number] = 0;
+		pagetables[jid].cacheFrame[p2->page_number] = 0;
+	}
+	
+	// process the first line moved to cache. If the function reaches this point, it must have
+	// moved at least one line to cache (if not it will have returned false).
+	processLineFromCache(0,cache,jid);
+	return true;
+}
+
+/*
+ * Find the pagetable corresponding to the page in 'frame' and update it to -1 to
+ * effectively remove this page from cache. Note: the data in the frame will remain, so
+ * this function should only be used in conjunction with a reallocation of this frame.
+ */
+void removeFromCache(MEMORY *cache, int frame) {
+	int pageNumber = cache->frames[frame]->page_number;
+	
+	for(int i=0; i<MAXJOBS; i++) {
+		// find the relevant page table and update it
+		if( pagetables[i].cacheFrame[pageNumber] == frame ) {
+			pagetables[i].cacheFrame[pageNumber] = -1;
+		}
 	}
 }
 
@@ -402,23 +468,47 @@ bool processLineFromRAM(MEMORY *ram, MEMORY *cache, int jid) {
  * from ram in order to free up space.
  */
 void loadPageToRAM(MEMORY *ram, PAGE *p, int jid) {
-	// find the page number that must be removed from ram
+	// find the frame that must be removed from ram and update its pagetable entry
 	int lru = ram->LRU[0];
-	int evictedPage = ram->frames[lru]->page_number;
-	
-	// remove this page **************** this currently does not find the correct jid for the evicted page **************************************
-	pagetables[ ******* ].RAMFrame[evictedPage] = -1;
+	removeFromRAM(ram,lru);
 	
 	// add the new page and its associated lines to ram
-	ram->frames[lru] = p;
+	ram->frames[lru] = *p;
 	// update page table to reflect change
 	pagetables[jid].RAMFrame[newPage] = lru;
 	
 	// update LRU by moving the frame that was just accessed to the end of the list
-	for(int i=0; i< (ram->num_frames-1); i++) {
+	updateLRU(ram,lru);
+}
+
+/*
+ * Find the pagetable corresponding to the page in 'frame' and update it to -1 to
+ * effectively remove this page from ram. Note: the data in the frame will remain, so
+ * this function should only be used in conjunction with a reallocation of this frame.
+ */
+void removeFromRAM(MEMORY *ram, int frame) {
+	int pageNumber = ram->frames[frame]->page_number;
+	
+	for(int i=0; i<MAXJOBS; i++) {
+		// find the relevant page table and update it
+		if( pagetables[i].RAMFrame[pageNumber] == frame ) {
+			pagetables[i].RAMFrame[pageNumber] = -1;
+		}
+	}
+}
+
+/*
+ * Updates the least recently used (LRU) array in ram, according to the new most recently
+ * used frame(mru), i.e. moves the frame 'mru' to the end of the array, sifting other frames
+ * forward accordingly.
+ */
+void updateLRU(MEMORY *ram, int mru) {
+	int temp = ram->LRU[mru];
+	for(int i=mru; i< (ram->num_frames-1); i++) {
 		ram->LRU[i] = LRU[i+1];
 	}
-	ram->LRU[ram->num_frames-1] = lru;
+	// the most recently used frame is now at the end of the list
+	ram->LRU[ram->num_frames-1] = mru;
 }
 
 MEMORY* initialiseMemory(int cost, int num_frames) {
