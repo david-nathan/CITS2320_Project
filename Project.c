@@ -433,18 +433,23 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 		removeFromCache(cache,0);
 		removeFromCache(cache,1);
 		
-		PAGE *p1 = getPage(harddrive,jid,line);
-		PAGE *p2 = getPage(harddrive,jid,nextLine);
-		cache->frames[0] = *p1;
-		cache->frames[1] = *p2;
-		pagetables[jid].cacheFrame[p1->page_number] = 0;
-		pagetables[jid].cacheFrame[p2->page_number] = 0;
+		// add the new pages and update the LRU array in ram
+		addToCache(cache, getPage(harddrive,jid,line), 0, jid);
+		addToCache(cache, getPage(harddrive,jid,nextLine), 1, jid);
+		updateLRU(ram, frame);
+		updateLRU(ram, pagetables[jid].RAMFrame[nextPage]);
 	}
 	
 	// process the first line moved to cache. If the function reaches this point, it must have
 	// moved at least one line to cache (if not it will have returned false).
 	processLineFromCache(0,cache,jid);
 	return true;
+}
+
+void addToCache(MEMORY *cache, PAGE *p, int frame, int jid) {
+	cache->frames[frame] = *p;
+	pagetables[jid].cacheFrame[p->page_number] = frame;
+	updateLRU(
 }
 
 /*
