@@ -155,7 +155,7 @@ void loadJobFiles(char* file) {
         newJob.length = linecount - 1;
         
         //Add to Job to queue of Jobs
-        enqueueJOBQ(newJob, todoJobs);
+  //      enqueueJOBQ(newJob, todoJobs);
        
         printf("NEWJOB Q'd: %s\n", newJob.filename);
        

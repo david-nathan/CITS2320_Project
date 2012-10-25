@@ -1,16 +1,41 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>    
+#include <stdbool.h>
+#include <string.h> 
+#include <assert.h> 
+
+#include "Project.h"
 
 #define EOL    '\n'
 #define CARRIAGE_RETURN    '\r'
 
 
+
+extern char *strdup(const char *);
+extern void enqueueJOBQ(JOB element, JOBQ *q);
+extern JOBQ *newJOBQ(int size);
+extern bool isEmptyJOBQ(JOBQ *q);
+extern JOB peekJOBQ(JOBQ *q);
+extern JOB dequeueJOBQ(JOBQ *q);
+extern void sortJOBQ(JOBQ *q);
+
 const char * FCFS = "FCFS";
 const char * roundRobin = "RR";
 
 
+/*---GLOBALS---*/
+
+/* Array of Jobs that are in the specified file that are indexed by jobID*/
+JOB jobList[MAXJOBS];
+
+/* Queue of t */
+JOBQ *todoJobs;
+JOBQ *readyJobs;
+
+PAGETABLE pagetables[MAXJOBS];
+
+/*---HELPER FUNCTIONS---*/
 void DieWithUserMessage(const char *msg, const char *detail) {
     fputs(msg, stderr);
     fputs(": ",stderr);
@@ -26,164 +51,449 @@ void DieWithSystemMessage(const char *msg) {
     exit(1);
 }
 
-struct JOB {
-	
-	int start;
-	int length;
-	char* filename;
-	
-	};
-	
-	
-int start_cmp(const struct JOB *j1, const struct JOB *j2){
-
-	return (int)(j1->start - j2->start);
-}
-
-int *FCFS_sched(const struct JOB *jobs, int num_jobs){
-	
-	int* times = (int*)malloc(num_jobs*sizeof(int));
-	int variable_count = 0;
-	char *variables = malloc(sizeof(char));
-	
-	for(int i=0; i<num_jobs; i++){	
-		char *line = malloc(BUFSIZ);
-		char joblines[jobs[i].length][BUFSIZ];
-				
-		FILE *fp = fopen(jobs[i].filename, "r");
-		
-		int line_num=0;
-		while(fgets(line, BUFSIZ, fp) != NULL){
-			strcpy(joblines[line_num],line);
-			line_num++;		
-		}
-				
-		int count =0;
-		for(int j =1; j< jobs[i].length; j++){
-			if(strncmp(joblines[j],"if", 2) == 0){			
-			 char tok_str[9][BUFSIZ];
-			 int n=0;
-			 char *token;
-			 
-			 if((token=strtok(joblines[j]," ")) != NULL){
-			 	do {                    
-			 	 strcpy(tok_str[n], token);
-			 	 n++;
-			 	} while((token=strtok(NULL," ")) != NULL);
-             }
-			 
-			 for(int i=0; i<9; i++){
-			 printf("Token[%d]: %s\n", i, tok_str[i]);
-			 }
-                char *p;
-                
-			 if((p=strchr(variables, (int)(tok_str[1][0]))) != NULL){
-                 
-			 } else {
-                 
-                 strcat(variables, tok_str[1]);
-                 strcat(variables, "0 ");
-                 variable_count++;
-                 
-                 printf("Variables: %s\n", variables);
-             }
-                
-            }
-        
-			count++;			
+void trimLine(char line[]){
+    int i = 0;
+    while(line[i] != '\0') {
+        if(line[i] == CARRIAGE_RETURN || line[i]== EOL){
+            line[i] = '\0';
+        }
+        i++;
     }
-		
-		times[i] = count;
-		free(line);			
-		fclose(fp);
 }
-	int *p = &(times[0]);
-	
-		
-	return p;
-}
-	
-	
 
-int countLines(char* str_filename){
-     FILE *fd = fopen(str_filename, "r");
-     
-     if(fd == NULL){ DieWithSystemMessage("Unable to open file"); } //Test that file was opened
+
+/**
+ * Reads in a single line from a Job file and processes it.
+ * Checks if it is a special line and carries out the functionality accordingly.
+ *
+ */
+void processSingleLine(char* line, int jobID){
+    JOB *job = &(jobList[jobID]);
+    
+    //Checks if line is special 
+    if(strncmp(line, "if", 2) == 0){
+        char tok_str[9][BUFSIZ];
+        char *token;
+        char var;
+        int linenum;
+        int compare;
+        
+        int n = 0;
+        
+        //Isolates tokens in the given line that are separated by whitespace or tab spaces
+        if((token = strtok(line, " ")) != NULL){
+            do{
+                strcpy(tok_str[n], token);
+                n++;
+            }while((token=strtok(NULL, " ")) != NULL);
+        }
+        
+        
+        var = tok_str[1][0];
+        linenum = atoi(tok_str[8]);
+        compare = atoi(tok_str[3]);
+        
+        
+        
+        //printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
+        
+        
+        
+        
+        //Check if variable already exists and if not create a new one
+        int var_index = 0;
+        
+        //printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+        
+        while (var_index < job->num_vars && job->vars[var_index] != var) {                       
+            var_index++;
+        }
+        
+        
+        
+        if (var_index == job->num_vars) {
+            //variable does not exist, create a new variable with value 0
+            job->vars[job->num_vars] = var;
+            job->var_values[job->num_vars] = 0;
+            //check if max number of variables has been reached
+            if (job->num_vars == MAXVARS) {
+                DieWithUserMessage("Max Variables", "The maximum allow number of variables for a job has been exceeded");
+            }char* result = malloc(BUFSIZ);
+            job->num_vars = job->num_vars + 1;
+        }
+       
+        //process line
+        if (job->var_values[var_index] < compare) {
+            job->var_values[var_index] = job->var_values[var_index] + 1;
+            job->currentline = linenum;
+        } else {
+            job->currentline = job->currentline + 1;
+        }
+        
+    } else {
+        job->currentline = job->currentline + 1;
+    }
+}
+
+void loadJobFiles(char* file, MEMORY harddrive) {
+    
+    FILE *fp = fopen(file, "r");
+    if(fp == NULL){
+        DieWithSystemMessage("Unable to open Job-List file");
+    }
+    
+    int jobID = 0;
+    int hdFrameCount = 0;
+    char jobFile[BUFSIZ];
+    
+    while (fgets(jobFile, sizeof(jobFile), fp) != NULL) {
+        
+        trimLine(jobFile); 
+        FILE *fpJob = fopen(jobFile, "r");
+       
+        if(fpJob == NULL){
+            DieWithSystemMessage("Unable to open Job file");
+        }
+        
+        char buffer[BUFSIZ];
+        int linecount = 0;
+        int pagecount = 0;
+        
+        JOB newJob;
+        newJob.currentline = 1;
+        newJob.num_vars = 0;
+        newJob.jobID = jobID;
+        newJob.filename = strdup(jobFile);
+        
+        //go through a job
+        while (fgets(buffer, sizeof(buffer), fpJob) != NULL) {
+             trimLine(buffer);
+           
+            if(linecount == 0){
+                newJob.start = atoi(buffer);
+                linecount++;
+            }
+            
+            
+            if(linecount %2 != 0){
+                //Create new page and add to harddrive
+                PAGE page;
+                page.data[0] = strdup(buffer);
+                page.page_number = pagecount;
+                //add page to harddrive
+                harddrive.frames[hdFrameCount] = page;
+                
+                // update page table
+                pagetables[jobID].pageIndex[linecount] = pagecount;
+                pagetables[jobID].hdd_frameIndex[pagecount] = hdFrameCount;
+                pagetables[jobID].RAMFrame[pagecount] = -1;
+                pagetables[jobID].cacheFrame[pagecount] =  -1;
+                
+                pagecount++;
+                hdFrameCount++;
+            } else {
+                //Even line number
+                harddrive.frames[hdFrameCount - 1].data[1] = strdup(buffer);
+
+                pagetables[jobID].pageIndex[linecount] = pagecount-1;
+            }
+            
+            linecount++;
+        }
+        
+        newJob.length = linecount - 1;
+        
+        //Add to Job to queue of Jobs
+        enqueueJOBQ(newJob, todoJobs);
               
-     unsigned int line_count = 0;
-     char ch;
+        jobID++;
+        
+       fclose(fpJob);
       
-     while ( (ch = fgetc(fd)) != EOF) //loop through each character in file. 
-         {
-      if (ch == EOL || ch == CARRIAGE_RETURN){ ++line_count;} //increase line_count if end-of-line or carriage-return is encountered
-          }
-         
-     if (fd) { fclose(fd);}
+        
+    }
+    
+    sortJOBQ(todoJobs);
+    
+}
+
+void printResults(int *results, int end, char *sched){
+    
+  char* buffer = malloc(BUFSIZ);  
+  char* result = malloc(BUFSIZ);
+  char* token = malloc(BUFSIZ);
+  char* placeholder = malloc(BUFSIZ);  
+  char rrResults[MAXJOBS][BUFSIZ];
+    
+    for(int i = 0; i < end; i++){
+     if(results[i] == MAXJOBS){
+        snprintf(buffer,2,"%s", "X");
+     } else {     
+        snprintf(buffer, 2, "%d", results[i]);
+     }
+
+     strcat(result, buffer);
      
-     return line_count;
-      } 
+    }    
+   
+    strcat(token, "X");
+    size_t start =0;
+    size_t position=0;
+    size_t length=0;
+    
+    while((position=strspn(result, token)) != strlen(result)){
+       
+       start += position;
+       result += position;
+       strncpy(placeholder, result, 1);
+       length = strspn(result, placeholder);
+              
+       if(!strcmp(sched, FCFS)){
+        printf("%s %d %d\n", jobList[atoi(placeholder)].filename, start, start+length-1); 
+        strcat(token, placeholder);
+       }
+       if(!strcmp(sched, roundRobin)){
+       snprintf(buffer, 4, "%d ", start);
+       strcat(rrResults[atoi(placeholder)], buffer);
+       strcat(placeholder, "X");
+       strcpy(token, placeholder);
+       }    
+    }
+    
+    if(!strcmp(sched,roundRobin)){
+       int i = 0;
+       while(jobList[i].filename != NULL){
+          printf("%s %s\n", jobList[i].filename, rrResults[i]);
+          i++;       
+       }    
+    }
+    
+}
+
+
+void simulateNoMemory(char* file, char* sched, int timeQuant){
+    
+    MEMORY harddrive;
+    harddrive.num_frames = MAXJOBS * MAX_PAGES;
+    harddrive.frames = calloc(harddrive.num_frames, sizeof(PAGE));
+        
+    loadJobFiles(file, harddrive);
+    
+    int time = 1;
+    int count = 0;
+    int print[MAXTIME];
+    for (int i = 0; i < MAXTIME; i++) {
+        print[i] = MAXJOBS;
+    }
+    bool rrUp = false; 
+    
+    while(!isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs)){
+        
+        while(!isEmptyJOBQ(todoJobs) && peekJOBQ(todoJobs).start == time){
+            
+            JOB newJob = dequeueJOBQ(todoJobs);
+            jobList[newJob.jobID] = newJob;
+            enqueueJOBQ(newJob, readyJobs);
+            
+            //printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
+            
+        }
+         
+        //IDLE if no ready jobs
+        if(isEmptyJOBQ(readyJobs)) {
+            time++;
+            continue;
+        }
+        
+        //Fetch Next Job
+        int jid = peekJOBQ(readyJobs).jobID;
+        JOB *j = &jobList[jid];
+        
+        //If Job is finished
+        if(j->currentline == j->length){
+            dequeueJOBQ(readyJobs);
+            count = 0;
+            continue;
+        }
+        
+        
+        //Check for RR schedule
+        if(!strcmp(sched,roundRobin) && rrUp){
+            JOB next = dequeueJOBQ(readyJobs);
+            enqueueJOBQ(next, readyJobs);
+            count = 0;
+            rrUp = false;
+            continue;
+        }
+         
+       
+        
+        //PROCESS line from HDD
+        int pagenum = pagetables[jid].pageIndex[j->currentline];
+        int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
+        PAGE current_page = harddrive.frames[hdd_framenum];
+        char* line = current_page.data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
+        processSingleLine(line, jid);
+        print[time] = jid;
+        time++;
+        count++;
+        
+        
+        //Check for timequantum
+        if(count == timeQuant && j->currentline != j->length){
+            rrUp = true;
+         }
+    }
+    
+    printResults(print, time, sched);
+    free(harddrive.frames);
+    
+}
+
+void simulateWithMemory(char* file, char* sched, int timeQuant){
+	// bool to state whether this is a RR or FCFS simulation
+	bool RR;
+	
+	// timeQuant should be -1 if not RR
+	if(timeQuant == -1) {
+		RR = false;
+	} else {
+		RR = true;
+	}
+	
+	MEMORY disk;
+	// allocate the disk size according to the number of jobs and their max length (in lines)
+	disk.num_frames = MAX_PAGES;
+	// no cost, however a page fault is caused on access, and can only transfer to ram
+	disk.accessCost = 0;
+	disk.frames = calloc(disk.num_frames, sizeof(PAGE));
+	// allocate space, although in this simulation this array will not be necessary
+	disk.LRU = calloc(disk.num_frames, sizeof(int));
+	
+	// now that the memory objects have been created, store the job files on the disk
+	loadJobFiles(file, disk);
+	
+	MEMORY ram;
+	// always 8 frames for this project
+	ram.num_frames = 8;
+	ram.accessCost = 2;
+	ram.frames = calloc(ram.num_frames, sizeof(PAGE));
+	ram.LRU = calloc(ram.num_frames, sizeof(int));
+	
+	/* Note: no allocation for LRU (LRU) for this MEMORY object, as it will not be used */
+	MEMORY cache;
+	// always 2 frames for this project
+	cache.num_frames = 2;
+	cache.accessCost = 1;
+	cache.frames = calloc(cache.num_frames, sizeof(PAGE));
+	// allocate space, although in this simulation this array will not be necessary
+	cache.LRU = calloc(cache.num_frames, sizeof(int));
+	
+	// initialise the page table
+	PAGETABLE table;
+	//table.RAMFrame = calloc(MAX_PAGES, sizeof(int));
+	//table.cacheFrame = calloc(MAX_PAGES, sizeof(int));
+	
+	// initialise a parameter to keep track of the time throughout the simulation
+	int time = 0;
+	// keep track of how long the current job has been executing (for Round Robin)
+	int count = 0;
+	// keep a variable for the current job
+	JOB j;
+	
+	// keeping looping as long as at least one job remains (whether it has begun execution or not)
+	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {		
+		// enqueue new jobs due to start at this time (if such jobs exist)
+		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
+			enqueueJOBQ(dequeueJOBQ(todoJobs),readyJobs);
+		}
+		// if there are no jobs to process, increment time and restart loop
+		if( isEmptyJOBQ(readyJobs) ) {
+			time++;
+			continue;
+		}
+	
+		// PROCESS AS FCFS
+		
+		//TODO
+		/*if( !RR ) {
+			j = peekJOBQ(readyJobs);
+			int line = j.currentline;
+			
+			// check if the line is already in cache
+			if( cacheFrame[ ********* ] != -1) {
+			      
+				processLineFromCache(cacheFrame[ ******** ] ,j);
+				// cost of processing from cache is 1
+				time++;
+			}
+			
+			// check if in RAM
+			if( RAMFrame[ ********* ] != -1) {
+			        
+				processLineFromRAM(RAMFrame [ ********* ] , j);
+				// cost of filling cache and processing line is 2
+				time += 2;
+			}
+			
+			// if not in cache or RAM, page fault, need to load a page from disk
+			
+			loadPageToRAM( ********* , RAM, j);
+			
+			
+		}		else		{
+		// ELSE PROCESS AS RR
+			
+		} */
+	
+	
+		// time increment should only occur here when initially running with no jobs in readyJobs queue
+		time++;
+	}
+}
 
 int main(int argc, char *argv[]){
+
+    todoJobs = newJOBQ(MAXJOBS); 
+    readyJobs = newJOBQ(MAXJOBS);
     
     if(argc < 3 || argc > 4){//Test for correct number of arguments
     DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
     }
     
-    char* sched = argv[1]; //Type of schedule 
-    char* file = argv[2]; //Name of file that contains jobs
+    
+    
     int timeQuant;        //Time quantum for RR scheduling
     int numJobs;          //Number of Jobs
+    char* sched;          //Type of schedule 
+    char* file;           //Name of file that contains jobs
     
-    if(strcmp(sched, roundRobin) == 0){ 
-       if(argc == 3){//Test for correct number of arguments for RR
-        DieWithUserMessage("Parameter(s)", "<Time Quantum>");
-        }       
-        timeQuant = atoi(argv[3]); //Set time quantum
-    } 
+    if(argc==3){
+     sched = argv[1];         
+        if(strcmp(sched, roundRobin) == 0){ 
+              DieWithUserMessage("Parameter(s)", "<Time Quantum>");
+           }            
+        if(strcmp(sched, FCFS) == 0){
+          file = argv[2]; 
+          timeQuant = 1;
+               } else {
+             DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+             }      
+    }
     
-   numJobs = countLines(file);
-   
-   printf("Number of Jobs: %d\n", numJobs);
-   
-   char* jobfile = malloc(BUFSIZ);
-   char jobfiles[numJobs][BUFSIZ];
-   struct JOB jobs[numJobs];
-   
-   FILE *fp= fopen(file, "r");
-   if(fp == NULL){ DieWithSystemMessage("Unable to open file"); } //Test that file was opened
-   
-   int n=0;
-    while(fgets(jobfile, BUFSIZ, fp) != NULL)
-   { 	
-   	 jobfile[strlen(jobfile)-1] ='\0';
-   	 strcpy(jobfiles[n],jobfile);
-   	 n++;
-   }   
-   
-   for(int i=0; i< numJobs; i++){
-   	int length = countLines(jobfiles[i]);
-   	char *buf = malloc(BUFSIZ);
-   	FILE *file = fopen(jobfiles[i], "r");
-   	fgets(buf, BUFSIZ, file);
-   	int start = atoi(buf);
-   	jobs[i].filename = jobfiles[i];
-   	jobs[i].length = length;
-   	jobs[i].start = start;
-   	free(buf);
-   }   
+    if(argc==4){
+      sched = argv[1];                      //Type of schedule 
       
-   qsort(jobs, numJobs, sizeof(struct JOB), (int(*)(const void*,const void*))start_cmp); //Orders the Array according to start time
-   
-   int *jobtimes = FCFS_sched(jobs, numJobs);
-      
-      for(int i =0; i<numJobs; i++){
-   printf("File: %s, start: %d time: %d\n",jobs[i].filename, jobs[i].start, jobtimes[i]);   
-         }
-   
-   free(jobfile);
-   
-   
-   
-   
-   
+        if(strcmp(sched, roundRobin) == 0){  
+            timeQuant = atoi(argv[2]);      //Set time quantum
+            file = argv[3];                 //Name of file that contains jobs           
+          }else{
+             DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+          }        
+        }
+    
+    
+    
+    simulateNoMemory(file, sched, timeQuant);
+           
 }
