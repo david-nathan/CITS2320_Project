@@ -62,6 +62,24 @@ void trimLine(char line[]){
 }
 
 
+
+
+MEMORY initialiseMemory(int cost, int num_frames) {
+	// initialise parameters and allocate space for arrays
+	MEMORY m;
+	m.num_frames = num_frames;
+	m.accessCost = cost;
+	m.frames = calloc(num_frames, sizeof(PAGE));
+	m.LRU = calloc(num_frames, sizeof(int));
+	
+	// initialise LRU
+	for(int i=0; i<num_frames; i++) {
+		m.LRU[i] = i;
+	}
+	
+	return m;
+}
+
 /**
  * Reads in a single line from a Job file and processes it.
  * Checks if it is a special line and carries out the functionality accordingly.
@@ -134,6 +152,14 @@ void processSingleLine(char* line, int jobID){
         job->currentline = job->currentline + 1;
     }
 }
+
+void processLineFromCache(int cacheFrame, MEMORY cache, int jid) {
+	// determine if the line to be processed is an even or odd line
+	int line = (jobList[jid].currentline + 1) % 2;
+	char *data = cache.frames[cacheFrame].data[line];
+	processSingleLine(data,jid);
+}
+
 
 void loadJobFiles(char* file, MEMORY harddrive) {
     
@@ -351,61 +377,39 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
 }
 
 void simulateWithMemory(char* file, char* sched, int timeQuant){
-	// bool to state whether this is a RR or FCFS simulation
-	bool RR;
-	
-	// timeQuant should be -1 if not RR
-	if(timeQuant == 1) {
-		RR = false;
-	} else {
-		RR = true;
-	}
-	
-	MEMORY *harddrive;
-	harddrive = initialiseMemory(0,MAX_PAGES);
-	
-	// now that the harddisk has been created, store the job files on it
-	loadJobFiles(file, harddrive);
-	
-	MEMORY *ram;
-	// always 2 access cost and 8 frames for this project
-	ram = initialiseMemory(2,8);
-	
-	MEMORY *cache;
-	// always 1 access cost and 2 frames for this project
-	cache = initialiseMemory(1,2);
-	
-	// initialise a parameter to keep track of the time throughout the simulation
-	int time = 1;
-	// keep track of how long the current job has been executing (for Round Robin)
-	int count = 0;
-	// keep a variable for the current job and job id
-	JOB *j; int jid;
-	
-	// keeping looping as long as at least one job remains (whether it has begun execution or not)
-	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {		
-		// enqueue new jobs due to start at this time (if such jobs exist)
-		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
-			JOB newJob = dequeueJOBQ(todoJobs);
-			enqueueJOBQ(newJob,readyJobs);
-			
-			// load the first two pages (four lines) from disk to ram
-			for(int i=0; i<2; i++) {
-				int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentLine + 2*i];
-				int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
-				loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
-			}
-		}
-		
-		// if there are no jobs to process, increment time and restart loop
-		if( isEmptyJOBQ(readyJobs) ) {
-			time++;
-			continue;
-		}
-	
-		//Fetch Next Job
-        jid = peekJOBQ(readyJobs).jobID;
-        j = &jobList[jid];
+
+      MEMORY harddrive;
+      harddrive = initialiseMemory(0, MAX_PAGES);
+      MEMORY ram;
+      ram = initialiseMemory(2,8);
+      MEMORY cache;
+      cache = initialiseMemory(1,2);
+      
+      loadJobFiles(file, harddrive);
+      
+      int time =1;
+      int count = 0;
+      bool rrUp;
+      
+      bool fromCache;
+      
+      while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
+            while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
+                  JOB newJob = dequeueJOBQ(todoJobs);
+                  jobList[newJob.jobID] = newJob;
+                  enqueueJOBQ(newJob, readyJobs);          
+            }
+      
+      
+       //IDLE if no ready jobs
+        if(isEmptyJOBQ(readyJobs)) {
+            time++;
+            continue;
+        }
+        
+        //Fetch Next Job
+        int jid = peekJOBQ(readyJobs).jobID;
+        JOB *j = &jobList[jid];
         
         //If Job is finished
         if(j->currentline == j->length){
@@ -413,220 +417,36 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
             count = 0;
             continue;
         }
-	
-		// PROCESS AS FCFS
-		
-		//TODO
-		if( !RR ) {
-			//PROCESS line from HDD
-			int pagenum = pagetables[jid].pageIndex[j->currentLine];
-			int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
-			PAGE *current_page = getPage(harddrive, jid, j->currentLine];
-			char* line = current_page->data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
-			
-			int frame;
-			// check if the line is already in cache
-			if( (frame = pagetables[jid].cacheFrame[ hdd_framenum ]) != -1) {
-			      
-				processLineFromCache( frame, cache, jid);
-				// cost of processing from cache is 1 in the case of this project
-				time += cache->accessCost;
-				continue;
-			}
-			
-			// check if in RAM
-			if( (frame = pagetables[jid].RAMFrame[ hdd_framenum ]) != -1) {
-				
-				// if process from ram was successful, increment time
-				if( processLineFromRAM(harddrive, ram, cache, jid, frame) ) {
-					// cost of filling cache and processing line is 2 in the case of this project
-					time += ram->accessCost;
-					continue;
-					
-				// otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
-				} else {
-					continue;
-				}
-			}
-			
-			// load the page from disk to ram
-			loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
-			
-		}		else		{
-		// ELSE PROCESS AS RR
-			
-		}
-		
-	}
-	
-	free(ram);
-	free(cache);
-	free(harddrive);
-	
+        
+        
+        //Check for RR schedule
+        if(!strcmp(sched,roundRobin) && rrUp){
+            JOB next = dequeueJOBQ(readyJobs);
+            enqueueJOBQ(next, readyJobs);
+            count = 0;
+            rrUp = false;
+            continue;
+        }
+      
+        //TODO load first TWO pages in RAM if new
+        
+        //PROCESS LINE FROM CACHE
+        int frame;
+        int pagenum = pagetables[jid].pageIndex[j->currentline];
+        if(frame = pagetables[jid].cacheFrame[pagenum] != -1){
+       	   processLineFromCache( frame, cache, jid);
+	   // cost of processing from cache is 1 in the case of this project
+	   time += cache.accessCost;
+
+	   continue;       
+        }
+      
+      }
+      
+
 }
 
-PAGE *getPage(MEMEORY* harddrive, int jid, int line) {
-	int pagenum = pagetables[jid].pageIndex[line];
-	int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
-	return &harddrive.frames[hdd_framenum];
-}
 
-/*
- * Process one line from the cache.
- */
-void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
-	// determine if the line to be processed is an even or odd line
-	int line = (jobList[jid].currentline + 1) % 2;
-	char *data = & (cache->frames[cacheFrame]->data[line]);
-	processSingleLine(data,jid);
-}
-
-/*
- * Load two pages from ram to cache and process the first line in the first page. If
- * there is only one page page of this job in ram, this will cause a page fault and
- * return false, but will load the second page into ram from disk. If there is only
- * on page of the job remaining, it will be loaded into the cache and true will be
- * return (as no page fault will be generated).
- */
-bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, int frame) {
-	// the current line (defined for conciseness)
-	int line = jobList[jid].currentline;
-	// find the next page to be processed (since we need to move TWO pages to cache)
-	int nextLine;
-	int nextPage;
-	if( (jobList[jid].currentline + 1) % 2 == 0) {
-		nextLine = line + 1;
-	} else {
-		nextLine = line + 2;
-	}
-	// set nextPage to reflect the index of the next page, or -1 if there is no next page
-	if(nextLine <= jobList[jid].length;) {
-		nextPage = pagetables[jid].pageIndex[nextLine];
-	} else {
-		nextPage = -1;
-	}
-	
-	// if there is a next page for this job and it is not in ram, page fault
-	if( nextPage != -1 && pagetables[jid].RAMFrame[nextPage] == -1 ) {
-		PAGE *p = getPage(harddrive,jid,nextLine);
-		loadPageToRAM(ram, p, jid);
-		return false;
-		
-	// if the next line is beyond the length of the job, allow one page to be moved to cache
-	} else if ( nextPage == -1 ) {
-		// delete previous page from cache
-		removeFromCache(cache,frame);
-		// arbitrarily move the current page it to the first frame in cache
-		PAGE *p = getPage(harddrive,jid,line);
-		cache->frames[0] = *p;
-		pagetables[jid].cacheFrame[p->page_number] = 0;
-		// update the LRU array in RAM
-		updateLRU(ram,frame);
-		
-	// otherwise move the next two pages to cache (this is the expected case)
-	} else {
-		// remove the previous pages
-		removeFromCache(cache,0);
-		removeFromCache(cache,1);
-		
-		// add the new pages and update the LRU array in ram
-		addToCache(cache, getPage(harddrive,jid,line), 0, jid);
-		addToCache(cache, getPage(harddrive,jid,nextLine), 1, jid);
-		updateLRU(ram, frame);
-		updateLRU(ram, pagetables[jid].RAMFrame[nextPage]);
-	}
-	
-	// process the first line moved to cache. If the function reaches this point, it must have
-	// moved at least one line to cache (if not it will have returned false).
-	processLineFromCache(0,cache,jid);
-	return true;
-}
-
-void addToCache(MEMORY *cache, PAGE *p, int frame, int jid) {
-	cache->frames[frame] = *p;
-	pagetables[jid].cacheFrame[p->page_number] = frame;
-	updateLRU(
-}
-
-/*
- * Find the pagetable corresponding to the page in 'frame' and update it to -1 to
- * effectively remove this page from cache. Note: the data in the frame will remain, so
- * this function should only be used in conjunction with a reallocation of this frame.
- */
-void removeFromCache(MEMORY *cache, int frame) {
-	int pageNumber = cache->frames[frame]->page_number;
-	
-	for(int i=0; i<MAXJOBS; i++) {
-		// find the relevant page table and update it
-		if( pagetables[i].cacheFrame[pageNumber] == frame ) {
-			pagetables[i].cacheFrame[pageNumber] = -1;
-		}
-	}
-}
-
-/*
- * Load one page from harddisk to ram, evicting the least recently used (LRU) frame
- * from ram in order to free up space.
- */
-void loadPageToRAM(MEMORY *ram, PAGE *p, int jid) {
-	// find the frame that must be removed from ram and update its pagetable entry
-	int lru = ram->LRU[0];
-	removeFromRAM(ram,lru);
-	
-	// add the new page and its associated lines to ram
-	ram->frames[lru] = *p;
-	// update page table to reflect change
-	pagetables[jid].RAMFrame[newPage] = lru;
-	
-	// update LRU by moving the frame that was just accessed to the end of the list
-	updateLRU(ram,lru);
-}
-
-/*
- * Find the pagetable corresponding to the page in 'frame' and update it to -1 to
- * effectively remove this page from ram. Note: the data in the frame will remain, so
- * this function should only be used in conjunction with a reallocation of this frame.
- */
-void removeFromRAM(MEMORY *ram, int frame) {
-	int pageNumber = ram->frames[frame]->page_number;
-	
-	for(int i=0; i<MAXJOBS; i++) {
-		// find the relevant page table and update it
-		if( pagetables[i].RAMFrame[pageNumber] == frame ) {
-			pagetables[i].RAMFrame[pageNumber] = -1;
-		}
-	}
-}
-
-/*
- * Updates the least recently used (LRU) array in ram, according to the new most recently
- * used frame(mru), i.e. moves the frame 'mru' to the end of the array, sifting other frames
- * forward accordingly.
- */
-void updateLRU(MEMORY *ram, int mru) {
-	int temp = ram->LRU[mru];
-	for(int i=mru; i< (ram->num_frames-1); i++) {
-		ram->LRU[i] = LRU[i+1];
-	}
-	// the most recently used frame is now at the end of the list
-	ram->LRU[ram->num_frames-1] = mru;
-}
-
-MEMORY* initialiseMemory(int cost, int num_frames) {
-	// initialise parameters and allocate space for arrays
-	MEMORY m;
-	m.num_frames = num_frames;
-	m.accessCost = cost;
-	m.frames = calloc(num_frames, sizeof(PAGE));
-	m.LRU = calloc(num_frames, sizeof(int));
-	
-	// initialise LRU
-	for(int i=0; i<num_frames; i++) {
-		LRU[i] = 0;
-	}
-	
-	return &m;
-}
 
 int main(int argc, char *argv[]){
 
@@ -670,6 +490,6 @@ int main(int argc, char *argv[]){
     
     
     
-    simulateNoMemory(file, sched, timeQuant);
+    simulateWithMemory(file, sched, timeQuant);
            
 }
