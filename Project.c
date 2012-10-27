@@ -535,7 +535,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 
 	int time =1;
 	int count = 0;
-	bool event = false;
+	bool ramAccess = false;
 	bool rrUp = false;
 	int print[MAXTIME];
 	for (int i = 0; i < MAXTIME; i++) {
@@ -560,7 +560,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			}
 		}
 
-		if(!event){
+		if(!ramAccess){
 
 			//IDLE if no ready jobs
 			if(isEmptyJOBQ(readyJobs)) {
@@ -618,9 +618,16 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 							print[time] = jid;
 							printf("RAM TIME: %d\n", time);
 							time++;
-							event = true; //Next iteration check new processes in todoJobs
+							// register that during the next iteration, nothing can be processed.
+							ramAccess = true;
 							continue;
 							// otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
+						} else {
+							// load the NEXT page from disk to ram
+							loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum+1]], jid);
+							rrUp = true;
+							printf("HERE\n");
+							continue;
 						}
 					}
 				} else {
@@ -639,7 +646,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 
 
 		} else {
-			event = false;
+			ramAccess = false;
 			time++;
 		}
 
