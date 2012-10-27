@@ -3,7 +3,9 @@ z'dihg'lsifhg
 uogsk;ubdgb
 sdoiughsud
 sdifhsdu
+if p < 8 p = p+1 goto 4
 sdofadgsdgsdr
 sdljng[94
+if k < 3 k = k+1 goto 2
 lsidhnryitfyoi
 r6iryi

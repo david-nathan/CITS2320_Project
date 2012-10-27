@@ -4,5 +4,4 @@ wewdheraa
 if i < 3 i = i+1 goto 2
 ;'sjsdtd
 dsdtassd
-if j < 3 j = j+1 goto 5
 dtgsd

@@ -113,7 +113,7 @@ void processSingleLine(char* line, int jobID){
         
         
         
-        //printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
+        printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
         
         
         
@@ -121,7 +121,7 @@ void processSingleLine(char* line, int jobID){
         //Check if variable already exists and if not create a new one
         int var_index = 0;
         
-        //printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+        printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
         
         while (var_index < job->num_vars && job->vars[var_index] != var) {                       
             var_index++;
@@ -472,7 +472,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
         }
          
         //IDLE if no ready jobs
-        if(isEmptyJOBQ(readyJobs)) {
+        if(isEmptyJOBQ(readyJobs)){
             time++;
             continue;
         }
@@ -536,6 +536,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
       
       int time =1;
       int count = 0;
+      bool event = false;
       bool rrUp = false;
       int print[MAXTIME];
       for (int i = 0; i < MAXTIME; i++) {
@@ -543,21 +544,25 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
       }
       
       while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
+            
             while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
                   JOB newJob = dequeueJOBQ(todoJobs);
                   jobList[newJob.jobID] = newJob;
-                  enqueueJOBQ(newJob, readyJobs);      
+                  enqueueJOBQ(newJob, readyJobs);   
+                  
+                  printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
+                     
                   //TODO load first TWO pages in RAM if new
                   // load the first two pages (four lines) from disk to ram
                   for(int i=0; i<2; i++) {
                      int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentline + 2*i];
                      int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
-                     loadPageToRAM(&ram, harddrive.frames[hdd_framenum], newJob.jobID);
-                     
-        }    
+                     loadPageToRAM(&ram, harddrive.frames[hdd_framenum], newJob.jobID);                     
+                     }                        
             }
       
-      
+      if(!event){
+            
        //IDLE if no ready jobs
         if(isEmptyJOBQ(readyJobs)) {
             time++;
@@ -629,6 +634,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
         if(j->currentline == j->length){
             dequeueJOBQ(readyJobs);
             count = 0;
+            printf("~~~~~~~~~~Process Died jid = %d at time %d~~~~~~~~~~\n", jid, time);
             continue;
         }
 <<<<<<< HEAD
@@ -642,16 +648,19 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
             rrUp = false;
             continue;
         }
+        
+        
              
         //PROCESS LINE FROM CACHE
         int frame;
         int pagenum = pagetables[jid].pageIndex[j->currentline];
-        if(frame = pagetables[jid].cacheFrame[pagenum] != -1){
+        if((frame = pagetables[jid].cacheFrame[pagenum]) != -1){
        	 if(!strcmp(sched, FCFS) || cache.accessCost <= timeQuant - count){ 
        	   processLineFromCache( frame, &cache, jid);
 	   // cost of processing from cache is 1 in the case of this project
 	   print[time] = jid;
 	   time += cache.accessCost;
+	   printf("CACHE TIME: %d\n", time);
 	   continue;   
 	   } else {
                  rrUp = true;
@@ -660,32 +669,44 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
         } else {
         
         //PROCESS LINE FROM RAM
-        if(frame = pagetables[jid].RAMFrame[pagenum] != -1){
+            if((frame = pagetables[jid].RAMFrame[pagenum]) != -1){
               if(!strcmp(sched, FCFS) || ram.accessCost <= timeQuant - count){
                  // if process from ram was successful, increment time
                  if( processLineFromRAM(&harddrive,&ram,&cache, jid, frame) ) {
                  // cost of filling cache and processing line is 2 in the case of this project
                          print[time] = jid;
-                         time += ram.accessCost;
+                         printf("RAM TIME: %d\n", time);
+                         time++;
+                         event = true; //Next iteration check new processes in todoJobs
                          continue;
                 // otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
-                       } else {
+                       } 
+                      } 
+                     } else {
                          // load the page from disk to ram
                          loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum]], jid);
-                         rrUp = true;                       
+                         rrUp = true;                     
                          continue;
                      }
              }        
-           }            
-         }
+                       
+        
       //Check for timequantum
         if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
             rrUp = true;
          }
-         
+
+      
+      } else {
+       event = false;
+       time++;
+      }
+      
       }
       
       printResults(print, time, sched);
+      
+      
         
 }
 
@@ -951,8 +972,6 @@ int main(int argc, char *argv[]){
              DieWithUserMessage("Parameter(s)", "<Schedule Type>");
           }        
         }
-    
-    
     
     simulateWithMemory(file, sched, timeQuant);
            
