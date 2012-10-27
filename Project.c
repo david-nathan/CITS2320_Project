@@ -87,6 +87,7 @@ MEMORY initialiseMemory(int cost, int num_frames) {
  */
 void processSingleLine(char* line, int jobID){
 	JOB *job = &(jobList[jobID]);
+	printf("line: %s\n", line);
 
 	//Checks if line is special
 	if(strncmp(line, "if", 2) == 0){
@@ -99,14 +100,13 @@ void processSingleLine(char* line, int jobID){
 		int n = 0;
 
 		//Isolates tokens in the given line that are separated by whitespace or tab spaces
-		if((token = strtok(line, " ")) != NULL){
+		if((token = strtok(line, " \t")) != NULL){
 			do{
 				strcpy(tok_str[n], token);
 				n++;
-			}while((token=strtok(NULL, " ")) != NULL);
+			}while((token=strtok(NULL, " \t")) != NULL);
 		}
-
-
+		
 		var = tok_str[1][0];
 		linenum = atoi(tok_str[8]);
 		compare = atoi(tok_str[3]);
@@ -120,12 +120,11 @@ void processSingleLine(char* line, int jobID){
 
 		//Check if variable already exists and if not create a new one
 		int var_index = 0;
-
-		printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
-
 		while (var_index < job->num_vars && job->vars[var_index] != var) {
 			var_index++;
 		}
+		
+		printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
 
 
 
@@ -136,7 +135,7 @@ void processSingleLine(char* line, int jobID){
 			//check if max number of variables has been reached
 			if (job->num_vars == MAXVARS) {
 				DieWithUserMessage("Max Variables", "The maximum allow number of variables for a job has been exceeded");
-			}char* result = malloc(BUFSIZ);
+			}
 			job->num_vars = job->num_vars + 1;
 		}
 
@@ -406,7 +405,7 @@ void printResults(int *results, int end, char *sched){
 	char rrResults[MAXJOBS][BUFSIZ];
 	
 	    for(int i =0; i< end; i++){
-    	printf("%d", results[i]);    
+    	printf("%d",results[i]);    
     }
     
     printf("\n");
@@ -565,7 +564,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 
 			printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
 
-			//TODO load first TWO pages in RAM if new
+			
 			// load the first two pages (four lines) from disk to ram
 			for(int i=0; i<2; i++) {
 				int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentline + 2*i];
@@ -614,7 +613,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 					processLineFromCache( frame, &cache, jid);
 					// cost of processing from cache is 1 in the case of this project
 					print[time] = jid;
-					printf("CACHE TIME: %d\n", time);
+					//printf("CACHE TIME: %d\n", time);
 					time++;
 					continue;
 				} else {
@@ -631,7 +630,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 							// cost of filling cache and processing line is 2 in the case of this project
 							print[time] = jid;
 							print[time+1] = jid;
-							printf("RAM TIME: %d\n", time);
+							//printf("RAM TIME: %d\n", time);
 							time++;
 							// register that during the next iteration, nothing can be processed.
 							ramAccess = true;
