@@ -613,7 +613,12 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 					processLineFromCache( frame, &cache, jid);
 					// cost of processing from cache is 1 in the case of this project
 					print[time] = jid;
+
 					//printf("CACHE TIME: %d\n", time);
+
+					printf("CACHE TIME: %d\n", time);
+					count++;
+
 					time++;
 					continue;
 				} else {
@@ -630,7 +635,10 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 							// cost of filling cache and processing line is 2 in the case of this project
 							print[time] = jid;
 							print[time+1] = jid;
-							//printf("RAM TIME: %d\n", time);
+
+							printf("RAM TIME: %d\n", time);
+							count += 2;
+
 							time++;
 							// register that during the next iteration, nothing can be processed.
 							ramAccess = true;
@@ -642,7 +650,11 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 							rrUp = true;
 							continue;
 						}
+					} else {
+						// if there isn't enough time to move new pages to cache, move on to next job
+						rrUp = true;
 					}
+
 				} else {
 					// load the page from disk to ram
 					loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum]], jid);
