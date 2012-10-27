@@ -561,9 +561,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
             }
       
       if(!event){
-      
-    
-      
+            
        //IDLE if no ready jobs
         if(isEmptyJOBQ(readyJobs)) {
             time++;
@@ -578,6 +576,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
         if(j->currentline == j->length){
             dequeueJOBQ(readyJobs);
             count = 0;
+            printf("~~~~~~~~~~Process Died jid = %d at time %d~~~~~~~~~~\n", jid, time);
             continue;
         }
         
@@ -611,7 +610,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
         } else {
         
         //PROCESS LINE FROM RAM
-       frame = pagetables[jid].RAMFrame[pagenum];
+            if((frame = pagetables[jid].RAMFrame[pagenum]) != -1){
               if(!strcmp(sched, FCFS) || ram.accessCost <= timeQuant - count){
                  // if process from ram was successful, increment time
                  if( processLineFromRAM(&harddrive,&ram,&cache, jid, frame) ) {
@@ -622,7 +621,9 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
                          event = true; //Next iteration check new processes in todoJobs
                          continue;
                 // otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
-                       } else {
+                       } 
+                      } 
+                     } else {
                          // load the page from disk to ram
                          loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum]], jid);
                          rrUp = true;                     
@@ -630,7 +631,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
                      }
              }        
                        
-         }
+        
       //Check for timequantum
         if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
             rrUp = true;
