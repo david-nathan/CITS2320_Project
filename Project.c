@@ -153,13 +153,157 @@ void processSingleLine(char* line, int jobID){
     }
 }
 
-void processLineFromCache(int cacheFrame, MEMORY cache, int jid) {
+
+
+
+
+void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
 	// determine if the line to be processed is an even or odd line
 	int line = (jobList[jid].currentline + 1) % 2;
-	char *data = cache.frames[cacheFrame].data[line];
+	char *data = cache->frames[cacheFrame].data[line];
 	processSingleLine(data,jid);
 }
 
+
+
+
+/*
+* Find the pagetable corresponding to the page in 'frame' and update it to -1 to
+* effectively remove this page from ram. Note: the data in the frame will remain, so
+* this function should only be used in conjunction with a reallocation of this frame.
+*/
+void removeFromRAM(MEMORY *ram, int frame) {
+      int pageNumber = ram->frames[frame].page_number;
+
+      for(int i=0; i<MAXJOBS; i++) {
+      // find the relevant page table and update it
+      if( pagetables[i].RAMFrame[pageNumber] == frame ) {
+       pagetables[i].RAMFrame[pageNumber] = -1;
+      }
+    }
+}
+
+
+/*
+* Updates the least recently used (LRU) array in ram, according to the new most recently
+* used frame(mru), i.e. moves the frame 'mru' to the end of the array, sifting other frames
+* forward accordingly.
+*/
+void updateLRU(MEMORY *ram, int mru) {
+     int temp = ram->LRU[mru];
+       for(int i=mru; i< (ram->num_frames-1); i++) {
+           ram->LRU[i] = ram->LRU[i+1];
+            }
+         // the most recently used frame is now at the end of the list
+         ram->LRU[ram->num_frames-1] = mru;
+}
+/*
+* Load one page from harddisk to ram, evicting the least recently used (LRU) frame
+* from ram in order to free up space.
+*/
+void loadPageToRAM(MEMORY *ram, PAGE p, int jid) {
+      // find the frame that must be removed from ram and update its pagetable entry
+      int lru = ram->LRU[0];      
+      removeFromRAM(ram,lru);
+      // add the new page and its associated lines to ram
+      ram->frames[lru] = p;
+      // update page table to reflect change
+      pagetables[jid].RAMFrame[p.page_number] = lru;
+      // update LRU by moving the frame that was just accessed to the end of the list
+      updateLRU(ram,lru);
+}
+
+/*
+* Find and return the page in the harddrive associated with a specific line and job.
+*/
+PAGE getPage(MEMORY *harddrive, int jid, int line) {
+int pagenum = pagetables[jid].pageIndex[line];
+int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
+return harddrive->frames[hdd_framenum];
+}
+
+/*
+* Add the specified page to the specified frame in the cache, updating the page table accordingly.
+*/
+void addToCache(MEMORY *cache, PAGE p, int frame, int jid) {
+cache->frames[frame] = p;
+pagetables[jid].cacheFrame[p.page_number] = frame;
+}
+
+/*
+* Find the pagetable corresponding to the page in 'frame' and update it to -1 to
+* effectively remove this page from cache. Note: the data in the frame will remain, so
+* this function should only be used in conjunction with a reallocation of this frame.
+*/
+void removeFromCache(MEMORY *cache, int frame) {
+int pageNumber = cache->frames[frame].page_number;
+
+for(int i=0; i<MAXJOBS; i++) {
+// find the relevant page table and update it
+if( pagetables[i].cacheFrame[pageNumber] == frame ) {
+pagetables[i].cacheFrame[pageNumber] = -1;
+}
+}
+}
+/*
+* Load two pages from ram to cache and process the first line in the first page. If
+* there is only one page page of this job in ram, this will cause a page fault and
+* return false, but will load the second page into ram from disk. If there is only
+* on page of the job remaining, it will be loaded into the cache and true will be
+* return (as no page fault will be generated).
+*/
+bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, int frame) {
+                   // the current line (defined for conciseness)
+                   int line = jobList[jid].currentline;
+                   // find the next page to be processed (since we need to move TWO pages to cache)
+                   int nextLine;
+                   int nextPage;
+                   if( (jobList[jid].currentline + 1) % 2 == 0) {
+                           nextLine = line + 1;
+                        } else {
+                           nextLine = line + 2;
+                        }
+                   // set nextPage to reflect the index of the next page, or -1 if there is no next page
+                   if(nextLine <= jobList[jid].length) {
+                           nextPage = pagetables[jid].pageIndex[nextLine];
+                        } else {
+                           nextPage = -1;
+                        }
+
+                   // if there is a next page for this job and it is not in ram, page fault
+                   if( nextPage != -1 && pagetables[jid].RAMFrame[nextPage] == -1 ) {
+                           PAGE p = getPage(harddrive,jid,nextLine);
+                           loadPageToRAM(ram, p, jid);
+                           return false;
+
+                   // if the next line is beyond the length of the job, allow one page to be moved to cache
+                        } else if ( nextPage == -1 ) {
+                   // delete previous page from cache
+                           removeFromCache(cache,frame);
+                   // arbitrarily move the current page it to the first frame in cache
+                           PAGE p = getPage(harddrive,jid,line);
+                           cache->frames[0] = p;
+                           pagetables[jid].cacheFrame[p.page_number] = 0;
+                  // update the LRU array in RAM
+                           updateLRU(ram,frame);
+
+                  // otherwise move the next two pages to cache (this is the expected case)
+                        } else {
+                  // remove the previous pages
+                          removeFromCache(cache,0);
+                          removeFromCache(cache,1);
+                  // add the new pages and update the LRU array in ram
+                          addToCache(cache, getPage(harddrive,jid,line), 0, jid);
+                          addToCache(cache, getPage(harddrive,jid,nextLine), 1, jid);
+                          updateLRU(ram, frame);
+                          updateLRU(ram, pagetables[jid].RAMFrame[nextPage]);
+                       }
+
+                  // process the first line moved to cache. If the function reaches this point, it must have
+                  // moved at least one line to cache (if not it will have returned false).
+                  processLineFromCache(0, cache,jid);
+                  return true;
+}
 
 void loadJobFiles(char* file, MEMORY harddrive) {
     
@@ -182,6 +326,8 @@ void loadJobFiles(char* file, MEMORY harddrive) {
         }
         
         char buffer[BUFSIZ];
+        
+       
         int linecount = 0;
         int pagecount = 0;
         
@@ -366,7 +512,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
         
         
         //Check for timequantum
-        if(count == timeQuant && j->currentline != j->length){
+        if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
             rrUp = true;
          }
     }
@@ -389,15 +535,25 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
       
       int time =1;
       int count = 0;
-      bool rrUp;
-      
-      bool fromCache;
+      bool rrUp = false;
+      int print[MAXTIME];
+      for (int i = 0; i < MAXTIME; i++) {
+        print[i] = MAXJOBS;
+      }
       
       while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
             while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
                   JOB newJob = dequeueJOBQ(todoJobs);
                   jobList[newJob.jobID] = newJob;
-                  enqueueJOBQ(newJob, readyJobs);          
+                  enqueueJOBQ(newJob, readyJobs);      
+                  //TODO load first TWO pages in RAM if new
+                  // load the first two pages (four lines) from disk to ram
+                  for(int i=0; i<2; i++) {
+                     int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentline + 2*i];
+                     int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
+                     loadPageToRAM(&ram, harddrive.frames[hdd_framenum], newJob.jobID);
+                     
+        }    
             }
       
       
@@ -427,23 +583,51 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
             rrUp = false;
             continue;
         }
-      
-        //TODO load first TWO pages in RAM if new
-        
+             
         //PROCESS LINE FROM CACHE
         int frame;
         int pagenum = pagetables[jid].pageIndex[j->currentline];
         if(frame = pagetables[jid].cacheFrame[pagenum] != -1){
-       	   processLineFromCache( frame, cache, jid);
+       	 if(!strcmp(sched, FCFS) || cache.accessCost <= timeQuant - count){ 
+       	   processLineFromCache( frame, &cache, jid);
 	   // cost of processing from cache is 1 in the case of this project
+	   print[time] = jid;
 	   time += cache.accessCost;
-
-	   continue;       
-        }
-      
+	   continue;   
+	   } else {
+                 rrUp = true;
+                 continue;	   
+	   }   	   	   
+        } else {
+        
+        //PROCESS LINE FROM RAM
+        if(frame = pagetables[jid].RAMFrame[pagenum] != -1){
+              if(!strcmp(sched, FCFS) || ram.accessCost <= timeQuant - count){
+                 // if process from ram was successful, increment time
+                 if( processLineFromRAM(&harddrive,&ram,&cache, jid, frame) ) {
+                 // cost of filling cache and processing line is 2 in the case of this project
+                         print[time] = jid;
+                         time += ram.accessCost;
+                         continue;
+                // otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
+                       } else {
+                         // load the page from disk to ram
+                         loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum]], jid);
+                         rrUp = true;                       
+                         continue;
+                     }
+             }        
+           }            
+         }
+      //Check for timequantum
+        if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
+            rrUp = true;
+         }
+         
       }
       
-
+      printResults(print, time, sched);
+        
 }
 
 
