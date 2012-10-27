@@ -2,7 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-#include <string.h>  
+#include <string.h> 
+#include <assert.h> 
 
 #include "Project.h"
 
@@ -54,11 +55,13 @@ void trimLine(char line[]){
     int i = 0;
     while(line[i] != '\0') {
         if(line[i] == CARRIAGE_RETURN || line[i]== EOL){
-        line[i] = '\0';
+            line[i] = '\0';
         }
         i++;
     }
 }
+
+
 /**
  * Reads in a single line from a Job file and processes it.
  * Checks if it is a special line and carries out the functionality accordingly.
@@ -71,30 +74,42 @@ void processSingleLine(char* line, int jobID){
     if(strncmp(line, "if", 2) == 0){
         char tok_str[9][BUFSIZ];
         char *token;
-        char *var;
+        char var;
         int linenum;
         int compare;
         
         int n = 0;
         
         //Isolates tokens in the given line that are separated by whitespace or tab spaces
-        if((token = strtok(line, " \t")) != NULL){
+        if((token = strtok(line, " ")) != NULL){
             do{
                 strcpy(tok_str[n], token);
                 n++;
-            }while((token=strtok(NULL, " \t")) != NULL);
+            }while((token=strtok(NULL, " ")) != NULL);
         }
         
-        trimLine(tok_str[1]); //remove null-byte
-        var = tok_str[1];
+        
+        var = tok_str[1][0];
         linenum = atoi(tok_str[8]);
         compare = atoi(tok_str[3]);
         
+        
+        
+        //printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
+        
+        
+        
+        
         //Check if variable already exists and if not create a new one
         int var_index = 0;
-        while (var_index < job->num_vars && job->vars[var_index] != var) {
+        
+        //printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+        
+        while (var_index < job->num_vars && job->vars[var_index] != var) {                       
             var_index++;
         }
+        
+        
         
         if (var_index == job->num_vars) {
             //variable does not exist, create a new variable with value 0
@@ -103,10 +118,10 @@ void processSingleLine(char* line, int jobID){
             //check if max number of variables has been reached
             if (job->num_vars == MAXVARS) {
                 DieWithUserMessage("Max Variables", "The maximum allow number of variables for a job has been exceeded");
-            }
+            }char* result = malloc(BUFSIZ);
             job->num_vars = job->num_vars + 1;
         }
-        
+       
         //process line
         if (job->var_values[var_index] < compare) {
             job->var_values[var_index] = job->var_values[var_index] + 1;
@@ -202,28 +217,88 @@ void loadJobFiles(char* file, MEMORY harddrive) {
     
 }
 
+void printResults(int *results, int end, char *sched){
+    
+  char* buffer = malloc(BUFSIZ);  
+  char* result = malloc(BUFSIZ);
+  char* token = malloc(BUFSIZ);
+  char* placeholder = malloc(BUFSIZ);  
+  char rrResults[MAXJOBS][BUFSIZ];
+    
+    for(int i = 0; i < end; i++){
+     if(results[i] == MAXJOBS){
+        snprintf(buffer,2,"%s", "X");
+     } else {     
+        snprintf(buffer, 2, "%d", results[i]);
+     }
+
+     strcat(result, buffer);
+     
+    }    
+   
+    strcat(token, "X");
+    size_t start =0;
+    size_t position=0;
+    size_t length=0;
+    
+    while((position=strspn(result, token)) != strlen(result)){
+       
+       start += position;
+       result += position;
+       strncpy(placeholder, result, 1);
+       length = strspn(result, placeholder);
+              
+       if(!strcmp(sched, FCFS)){
+        printf("%s %d %d\n", jobList[atoi(placeholder)].filename, start, start+length-1); 
+        strcat(token, placeholder);
+       }
+       if(!strcmp(sched, roundRobin)){
+       snprintf(buffer, 4, "%d ", start);
+       strcat(rrResults[atoi(placeholder)], buffer);
+       strcat(placeholder, "X");
+       strcpy(token, placeholder);
+       }    
+    }
+    
+    if(!strcmp(sched,roundRobin)){
+       int i = 0;
+       while(jobList[i].filename != NULL){
+          printf("%s %s\n", jobList[i].filename, rrResults[i]);
+          i++;       
+       }    
+    }
+    
+}
+
+
 void simulateNoMemory(char* file, char* sched, int timeQuant){
     
     MEMORY harddrive;
     harddrive.num_frames = MAXJOBS * MAX_PAGES;
     harddrive.frames = calloc(harddrive.num_frames, sizeof(PAGE));
-    
-    
+        
     loadJobFiles(file, harddrive);
     
     int time = 1;
     int count = 0;
+    int print[MAXTIME];
+    for (int i = 0; i < MAXTIME; i++) {
+        print[i] = MAXJOBS;
+    }
     bool rrUp = false; 
     
     while(!isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs)){
         
         while(!isEmptyJOBQ(todoJobs) && peekJOBQ(todoJobs).start == time){
+            
             JOB newJob = dequeueJOBQ(todoJobs);
             jobList[newJob.jobID] = newJob;
             enqueueJOBQ(newJob, readyJobs);
-            printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
+            
+            //printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
+            
         }
-        
+         
         //IDLE if no ready jobs
         if(isEmptyJOBQ(readyJobs)) {
             time++;
@@ -241,8 +316,9 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
             continue;
         }
         
+        
         //Check for RR schedule
-        if(sched == roundRobin && rrUp){
+        if(!strcmp(sched,roundRobin) && rrUp){
             JOB next = dequeueJOBQ(readyJobs);
             enqueueJOBQ(next, readyJobs);
             count = 0;
@@ -250,14 +326,18 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
             continue;
         }
          
+       
+        
         //PROCESS line from HDD
         int pagenum = pagetables[jid].pageIndex[j->currentline];
         int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
         PAGE current_page = harddrive.frames[hdd_framenum];
         char* line = current_page.data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
         processSingleLine(line, jid);
+        print[time] = jid;
         time++;
         count++;
+        
         
         //Check for timequantum
         if(count == timeQuant && j->currentline != j->length){
@@ -265,7 +345,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
          }
     }
     
-    
+    printResults(print, time, sched);
     free(harddrive.frames);
     
 }
@@ -582,6 +662,7 @@ int main(int argc, char *argv[]){
     
     if(argc==4){
       sched = argv[1];                      //Type of schedule 
+      
         if(strcmp(sched, roundRobin) == 0){  
             timeQuant = atoi(argv[2]);      //Set time quantum
             file = argv[3];                 //Name of file that contains jobs           
@@ -593,12 +674,5 @@ int main(int argc, char *argv[]){
     
     
     simulateNoMemory(file, sched, timeQuant);
-        
-    
-    
-        
-
-    
-   
-   
+           
 }

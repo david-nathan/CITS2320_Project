@@ -1,20 +1,21 @@
 
 
 #define MAXVARS 10
+#define MAXTIME 1000
 #define MAXJOBS 100
 #define MAX_JOB_LENGTH 100
 #define MAX_PAGES ((MAX_JOB_LENGTH * MAXJOBS + 1)/2)
 
 typedef struct {
     
-	int jobID;
-	int start;
+    int jobID;
+    int start;
     int currentline;
-	int length;
+    int length;
     int num_vars;
-    char *vars[MAXVARS];
+    char vars[MAXVARS];
     int var_values[MAXVARS];
-	char* filename;
+    char* filename;
 	
 }JOB;
 
