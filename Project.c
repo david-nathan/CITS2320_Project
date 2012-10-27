@@ -266,7 +266,7 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 	// find the next page to be processed (since we need to move TWO pages to cache)
 	int nextLine;
 	int nextPage;
-	if( (jobList[jid].currentline + 1) % 2 == 0) {
+	if( (line + 1) % 2 == 0) {
 		nextLine = line + 1;
 	} else {
 		nextLine = line + 2;
@@ -608,8 +608,8 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 					processLineFromCache( frame, &cache, jid);
 					// cost of processing from cache is 1 in the case of this project
 					print[time] = jid;
-					time += cache.accessCost;
 					printf("CACHE TIME: %d\n", time);
+					time++;
 					continue;
 				} else {
 					rrUp = true;
