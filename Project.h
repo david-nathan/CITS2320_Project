@@ -5,7 +5,6 @@
 #define MAX_JOB_LENGTH 100
 #define MAX_PAGES ((MAX_JOB_LENGTH * MAXJOBS + 1)/2)
 
-
 typedef struct {
     
 	int jobID;
@@ -63,3 +62,15 @@ typedef struct {
     int *LRU;
     
 } MEMORY;
+
+/** FUNCTION DECLARATIONS **/
+PAGE *getPage(MEMORY* harddrive, int jid, int line);
+void processLineFromCache(int cacheFrame, MEMORY *cache, int jid);
+bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, int frame);
+void addToCache(MEMORY *cache, PAGE p, int frame, int jid);
+void removeFromCache(MEMORY *cache, int frame);
+void loadPageToRAM(MEMORY *ram, PAGE p, int jid);
+void removeFromRAM(MEMORY *ram, int frame);
+void updateLRU(MEMORY *ram, int mru);
+MEMORY* initialiseMemory(int cost, int num_frames);
+/** END FUNCTION DECLARATIONS **/

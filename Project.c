@@ -285,7 +285,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	harddrive = initialiseMemory(0,MAX_PAGES);
 	
 	// now that the harddisk has been created, store the job files on it
-	loadJobFiles(file, harddrive);
+	loadJobFiles(file, *harddrive);
 	
 	MEMORY *ram;
 	// always 2 access cost and 8 frames for this project
@@ -311,9 +311,9 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			
 			// load the first two pages (four lines) from disk to ram
 			for(int i=0; i<2; i++) {
-				int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentLine + 2*i];
+				int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentline + 2*i];
 				int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
-				loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
+				loadPageToRAM(ram, harddrive->frames[hdd_framenum], newJob.jobID);
 			}
 		}
 		
@@ -339,9 +339,9 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 		//TODO
 		if( !RR ) {
 			//PROCESS line from HDD
-			int pagenum = pagetables[jid].pageIndex[j->currentLine];
+			int pagenum = pagetables[jid].pageIndex[j->currentline];
 			int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
-			PAGE *current_page = getPage(harddrive, jid, j->currentLine];
+			PAGE *current_page = getPage(harddrive, jid, j->currentline);
 			char* line = current_page->data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
 			
 			int frame;
@@ -370,7 +370,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			}
 			
 			// load the page from disk to ram
-			loadPageToRAM(hdd_framenum, harddrive, ram, &harddrive->frames[hdd_framenum]);
+			loadPageToRAM(ram, harddrive->frames[hdd_framenum], jid);
 			
 		}		else		{
 		// ELSE PROCESS AS RR
@@ -385,10 +385,13 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	
 }
 
-PAGE *getPage(MEMEORY* harddrive, int jid, int line) {
+/*
+ * Find and return the page in the harddrive associated with a specific line and job.
+ */
+PAGE *getPage(MEMORY *harddrive, int jid, int line) {
 	int pagenum = pagetables[jid].pageIndex[line];
 	int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
-	return &harddrive.frames[hdd_framenum];
+	return &harddrive->frames[hdd_framenum];
 }
 
 /*
@@ -397,7 +400,7 @@ PAGE *getPage(MEMEORY* harddrive, int jid, int line) {
 void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
 	// determine if the line to be processed is an even or odd line
 	int line = (jobList[jid].currentline + 1) % 2;
-	char *data = & (cache->frames[cacheFrame]->data[line]);
+	char *data = cache->frames[cacheFrame].data[line];
 	processSingleLine(data,jid);
 }
 
@@ -420,7 +423,7 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 		nextLine = line + 2;
 	}
 	// set nextPage to reflect the index of the next page, or -1 if there is no next page
-	if(nextLine <= jobList[jid].length;) {
+	if(nextLine <= jobList[jid].length) {
 		nextPage = pagetables[jid].pageIndex[nextLine];
 	} else {
 		nextPage = -1;
@@ -429,7 +432,7 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 	// if there is a next page for this job and it is not in ram, page fault
 	if( nextPage != -1 && pagetables[jid].RAMFrame[nextPage] == -1 ) {
 		PAGE *p = getPage(harddrive,jid,nextLine);
-		loadPageToRAM(ram, p, jid);
+		loadPageToRAM(ram, *p, jid);
 		return false;
 		
 	// if the next line is beyond the length of the job, allow one page to be moved to cache
@@ -450,8 +453,8 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 		removeFromCache(cache,1);
 		
 		// add the new pages and update the LRU array in ram
-		addToCache(cache, getPage(harddrive,jid,line), 0, jid);
-		addToCache(cache, getPage(harddrive,jid,nextLine), 1, jid);
+		addToCache(cache, *getPage(harddrive,jid,line), 0, jid);
+		addToCache(cache, *getPage(harddrive,jid,nextLine), 1, jid);
 		updateLRU(ram, frame);
 		updateLRU(ram, pagetables[jid].RAMFrame[nextPage]);
 	}
@@ -462,8 +465,8 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 	return true;
 }
 
-void addToCache(MEMORY *cache, PAGE *p, int frame, int jid) {
-	cache->frames[frame] = *p;
+void addToCache(MEMORY *cache, PAGE p, int frame, int jid) {
+	cache->frames[frame] = p;
 	pagetables[jid].cacheFrame[p->page_number] = frame;
 	updateLRU(
 }
