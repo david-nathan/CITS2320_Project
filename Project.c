@@ -190,8 +190,16 @@ void removeFromRAM(MEMORY *ram, int frame) {
  * forward accordingly.
  */
 void updateLRU(MEMORY *ram, int mru) {
-	int temp = ram->LRU[mru];
-	for(int i=mru; i< (ram->num_frames-1); i++) {
+	// the index corresponding to the most recently used frame
+	int lruIndex = 0;
+	for(int i=0; i< ram->num_frames; i++ ) {
+		if(ram->LRU[i] == mru) {
+			lruIndex = i;
+			break;
+		}
+	}
+	
+	for(int i=lruIndex; i< (ram->num_frames-1); i++) {
 		ram->LRU[i] = ram->LRU[i+1];
 	}
 	// the most recently used frame is now at the end of the list
@@ -626,7 +634,6 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 							// load the NEXT page from disk to ram
 							loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum+1]], jid);
 							rrUp = true;
-							printf("HERE\n");
 							continue;
 						}
 					}
@@ -700,6 +707,6 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	simulateWithMemory(file, sched, timeQuant);
+	simulateNoMemory(file, sched, timeQuant);
 
 }
