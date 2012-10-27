@@ -545,10 +545,12 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 	return true;
 }
 
+/*
+ * Add the specified page to the specified frame in the cache, updating the page table accordingly.
+ */
 void addToCache(MEMORY *cache, PAGE p, int frame, int jid) {
 	cache->frames[frame] = p;
-	pagetables[jid].cacheFrame[p->page_number] = frame;
-	updateLRU(
+	pagetables[jid].cacheFrame[p.page_number] = frame;
 }
 
 /*
@@ -557,7 +559,7 @@ void addToCache(MEMORY *cache, PAGE p, int frame, int jid) {
  * this function should only be used in conjunction with a reallocation of this frame.
  */
 void removeFromCache(MEMORY *cache, int frame) {
-	int pageNumber = cache->frames[frame]->page_number;
+	int pageNumber = cache->frames[frame].page_number;
 	
 	for(int i=0; i<MAXJOBS; i++) {
 		// find the relevant page table and update it
@@ -571,15 +573,15 @@ void removeFromCache(MEMORY *cache, int frame) {
  * Load one page from harddisk to ram, evicting the least recently used (LRU) frame
  * from ram in order to free up space.
  */
-void loadPageToRAM(MEMORY *ram, PAGE *p, int jid) {
+void loadPageToRAM(MEMORY *ram, PAGE p, int jid) {
 	// find the frame that must be removed from ram and update its pagetable entry
 	int lru = ram->LRU[0];
 	removeFromRAM(ram,lru);
 	
 	// add the new page and its associated lines to ram
-	ram->frames[lru] = *p;
+	ram->frames[lru] = p;
 	// update page table to reflect change
-	pagetables[jid].RAMFrame[newPage] = lru;
+	pagetables[jid].RAMFrame[p.page_number] = lru;
 	
 	// update LRU by moving the frame that was just accessed to the end of the list
 	updateLRU(ram,lru);
@@ -591,7 +593,7 @@ void loadPageToRAM(MEMORY *ram, PAGE *p, int jid) {
  * this function should only be used in conjunction with a reallocation of this frame.
  */
 void removeFromRAM(MEMORY *ram, int frame) {
-	int pageNumber = ram->frames[frame]->page_number;
+	int pageNumber = ram->frames[frame].page_number;
 	
 	for(int i=0; i<MAXJOBS; i++) {
 		// find the relevant page table and update it
@@ -609,7 +611,7 @@ void removeFromRAM(MEMORY *ram, int frame) {
 void updateLRU(MEMORY *ram, int mru) {
 	int temp = ram->LRU[mru];
 	for(int i=mru; i< (ram->num_frames-1); i++) {
-		ram->LRU[i] = LRU[i+1];
+		ram->LRU[i] = ram->LRU[i+1];
 	}
 	// the most recently used frame is now at the end of the list
 	ram->LRU[ram->num_frames-1] = mru;
@@ -625,7 +627,7 @@ MEMORY* initialiseMemory(int cost, int num_frames) {
 	
 	// initialise LRU
 	for(int i=0; i<num_frames; i++) {
-		LRU[i] = 0;
+		m.LRU[i] = 0;
 	}
 	
 	return &m;
