@@ -472,7 +472,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
         }
          
         //IDLE if no ready jobs
-        if(isEmptyJOBQ(readyJobs)) {
+        if(isEmptyJOBQ(readyJobs)){
             time++;
             continue;
         }
@@ -535,6 +535,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
       
       int time =1;
       int count = 0;
+      bool event = false;
       bool rrUp = false;
       int print[MAXTIME];
       for (int i = 0; i < MAXTIME; i++) {
@@ -542,9 +543,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
       }
       
       while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
-      
-      
-       
+            
             while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
                   JOB newJob = dequeueJOBQ(todoJobs);
                   jobList[newJob.jobID] = newJob;
@@ -558,10 +557,12 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
                      int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentline + 2*i];
                      int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
                      loadPageToRAM(&ram, harddrive.frames[hdd_framenum], newJob.jobID);                     
-                     }
-                         
+                     }                        
             }
       
+      if(!event){
+      
+    
       
        //IDLE if no ready jobs
         if(isEmptyJOBQ(readyJobs)) {
@@ -577,7 +578,6 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
         if(j->currentline == j->length){
             dequeueJOBQ(readyJobs);
             count = 0;
-            printf("FINISHED\n");
             continue;
         }
         
@@ -611,29 +611,37 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
         } else {
         
         //PROCESS LINE FROM RAM
-        if((frame = pagetables[jid].RAMFrame[pagenum]) != -1){
+       frame = pagetables[jid].RAMFrame[pagenum];
               if(!strcmp(sched, FCFS) || ram.accessCost <= timeQuant - count){
                  // if process from ram was successful, increment time
                  if( processLineFromRAM(&harddrive,&ram,&cache, jid, frame) ) {
                  // cost of filling cache and processing line is 2 in the case of this project
                          print[time] = jid;
                          printf("RAM TIME: %d\n", time);
-                         time += ram.accessCost;
+                         time++;
+                         event = true; //Next iteration check new processes in todoJobs
                          continue;
                 // otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
                        } else {
                          // load the page from disk to ram
                          loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum]], jid);
-                         rrUp = true;                       
+                         rrUp = true;                     
                          continue;
                      }
              }        
-           }            
+                       
          }
       //Check for timequantum
         if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
             rrUp = true;
          }
+
+      
+      } else {
+       event = false;
+       time++;
+      }
+      
       }
       
       printResults(print, time, sched);
