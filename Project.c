@@ -404,6 +404,12 @@ void printResults(int *results, int end, char *sched){
 	char* token = malloc(BUFSIZ);
 	char* placeholder = malloc(BUFSIZ);
 	char rrResults[MAXJOBS][BUFSIZ];
+	
+	    for(int i =0; i< end; i++){
+    	printf("%d", results[i]);    
+    }
+    
+    printf("\n");
 
 	for(int i = 0; i < end; i++){
 		if(results[i] == MAXJOBS){
@@ -624,6 +630,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 						if( processLineFromRAM(&harddrive,&ram,&cache, jid, frame) ) {
 							// cost of filling cache and processing line is 2 in the case of this project
 							print[time] = jid;
+							print[time+1] = jid;
 							printf("RAM TIME: %d\n", time);
 							time++;
 							// register that during the next iteration, nothing can be processed.
@@ -707,6 +714,6 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	simulateNoMemory(file, sched, timeQuant);
+	simulateWithMemory(file, sched, timeQuant);
 
 }
