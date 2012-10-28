@@ -106,7 +106,7 @@ void processSingleLine(char* line, int jobID){
 				n++;
 			}while((token=strtok(NULL, " \t")) != NULL);
 		}
-		
+
 		var = tok_str[1][0];
 		linenum = atoi(tok_str[8]);
 		compare = atoi(tok_str[3]);
@@ -123,7 +123,7 @@ void processSingleLine(char* line, int jobID){
 		while (var_index < job->num_vars && job->vars[var_index] != var) {
 			var_index++;
 		}
-		
+
 		printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
 
 
@@ -197,7 +197,7 @@ void updateLRU(MEMORY *ram, int mru) {
 			break;
 		}
 	}
-	
+
 	for(int i=lruIndex; i< (ram->num_frames-1); i++) {
 		ram->LRU[i] = ram->LRU[i+1];
 	}
@@ -403,12 +403,12 @@ void printResults(int *results, int end, char *sched){
 	char* token = malloc(BUFSIZ);
 	char* placeholder = malloc(BUFSIZ);
 	char rrResults[MAXJOBS][BUFSIZ];
-	
-	    for(int i =0; i< end; i++){
-    	printf("%d",results[i]);    
-    }
-    
-    printf("\n");
+
+	for(int i =0; i< end; i++){
+		printf("%d",results[i]);
+	}
+
+	printf("\n");
 
 	for(int i = 0; i < end; i++){
 		if(results[i] == MAXJOBS){
@@ -539,7 +539,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
  * Run a simulation with memory. This will use the default access times of 1 for cache memory
  * and 2 for RAM. The larger hard drive memory has no access cost, but will cause a page fault.
  */
-void simulateWithMemory(char* file, char* sched, int timeQuant){
+void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, char* outFile){
 
 	// initialise the three required memory objects and load the lines to harddrive
 	MEMORY harddrive;
@@ -550,7 +550,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	cache = initialiseMemory(1,2);
 
 	loadJobFiles(file, harddrive);
-	
+
 	// initialise simulation parameters
 	int time =1;
 	int count = 0;
@@ -563,7 +563,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 
 	// ensure that at least one job remains, regardless of whether it has begun execution
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
-		
+
 		// look for new jobs to move to 'ready' at this time
 		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
 			JOB newJob = dequeueJOBQ(todoJobs);
@@ -679,12 +679,12 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			}
 
 
-		// if loop was ignored due to ram access, increment time and reset to false
+			// if loop was ignored due to ram access, increment time and reset to false
 		} else {
 			ramAccess = false;
 			time++;
 		}
-		
+
 	}
 
 	printResults(print, time, sched);
@@ -709,10 +709,12 @@ int main(int argc, char *argv[]){
 	char* sched;          //Type of schedule
 	char* file;           //Name of file that contains jobs
 
-	switch( argc ) {
+	printf("argc: %d",argc);
 	
+	switch( argc ) {
+
 		// FCFS no memory
-		case 3: 
+		case 3:
 			sched = argv[1];
 			if(strcmp(sched, roundRobin) == 0) {
 				DieWithUserMessage("Parameter(s)", "<Time Quantum>");
@@ -724,6 +726,7 @@ int main(int argc, char *argv[]){
 			} else {
 				DieWithUserMessage("Parameter(s)", "<Schedule Type>");
 			}
+			break;
 
 		// RR no memory
 		case 4:
@@ -735,30 +738,51 @@ int main(int argc, char *argv[]){
 			} else {
 				DieWithUserMessage("Parameter(s)", "<Schedule Type>");
 			}
-		
+			break;
+
 		// FCFS with memory
-		case 5:
+		case 6:
 			sched = argv[3];                      //Type of schedule
 			if(strcmp(sched, roundRobin) == 0) {
 				DieWithUserMessage("Parameter(s)", "<Time Quantum>");
 			}
-			if(strcmp(sched, FCFS) == 0) {
-				int memDump = atoi(argv[2]);      //Set time quantum
-				file = argv[4];                 //Name of file that contains jobs
-				simulateNoMemory(file,sched,timeQuant);
+			if(strcmp(argv[1],"-m") == 0) {
+				if(strcmp(sched, FCFS) == 0) {
+					int memDump = atoi(argv[2]);
+					timeQuant = 1;					//Set time quantum
+					file = argv[4];                 //Name of file that contains jobs
+					char* outFile = argv[5];
+					simulateWithMemory(file,sched,timeQuant,memDump,outFile);
+				} else {
+					DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+				}
 			} else {
-				DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+				DieWithUserMessage("Parameter(s)", "<Memory>");
 			}
-		
+			break;
+			
 		// RR with memory
-		case 6:
-		
-		
+		case 7:
+			sched = argv[3];                      //Type of schedule
+			if(strcmp(argv[1],"-m") == 0) {
+				if(strcmp(sched, roundRobin) == 0) {
+					int memDump = atoi(argv[2]);
+					timeQuant = atoi(argv[4]);		//Set time quantum
+					file = argv[5];                 //Name of file that contains jobs
+					char* outFile = argv[6];
+					simulateWithMemory(file,sched,timeQuant,memDump,outFile);
+				} else {
+					DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+				}
+			} else {
+				DieWithUserMessage("Parameter(s)", "<Memory>");
+			}
+			break;
+			
 		// otherwise wrong number of arguments, exit with error message
 		default:
 			DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
 	}
-
-	simulateWithMemory(file, sched, timeQuant);
+	//simulateWithMemory(file, sched, timeQuant);
 
 }
