@@ -412,7 +412,7 @@ void printResults(int *results, int end, char *sched){
 
 	for(int i = 0; i < end; i++){
 		if(results[i] == MAXJOBS){
-			snprintf(buffer,2,"%s", "X");
+			snprintf(buffer,10,"%s", "X");
 		} else {
 			snprintf(buffer, 2, "%d", results[i]);
 		}
@@ -457,6 +457,115 @@ void printResults(int *results, int end, char *sched){
 
 }
 
+/*
+ * Finds the job associated with the specified frame in the specified memory
+ * object. This will be either ram or cache, as specified by the 'ram' bool.
+ *
+ * After finding the job, this function creates a string of length 180 chars
+ * and returns the memory dump of the specified frame in this string.
+ */
+bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
+	int jid = -1;
+
+	// find the job associated with this page
+	int pageNumber = m->frames[frame].page_number;
+	for(int j=0; j<MAXJOBS; j++) {
+		// look for the frame in the appropriate page table
+		if(ram) {
+			printf("HERE ram: %d %d\n",frame,j);
+			if( pagetables[j].RAMFrame[pageNumber] == frame ) {
+				jid = j;
+				break;
+			}
+		} else {
+			if( pagetables[j].cacheFrame[pageNumber] == frame ) {
+				jid = j;
+				break;
+			}
+		}
+	}
+
+	// if no job has been found, the frame must be empty
+	if(jid == -1) {
+		return false;
+	}
+
+	char *nextline = malloc(BUFSIZ);
+	char *line = malloc(BUFSIZ);
+	sprintf(line,"Frame %d: job %d\n",frame,jid);
+	printf("HERE2: %d\n",frame);
+	// append the two lines and an extra newline to separate frames
+	strcat(nextline,line);
+	strcat(nextline,m->frames[frame].data[0]);
+	strcat(nextline,m->frames[frame].data[1]);
+	strcat(nextline,"\n");
+	printf("HERE2: %d\n",frame);
+
+	// finally, append the dump of this frame to the output string
+	strcat(output,nextline);
+	free(nextline);
+	return true;
+}
+
+/*
+ * Print out the current contents of RAM and cache to the output string.
+ * If a frame is empty, it will still be included, but no lines or job numbers
+ * will be listed, instead it will just say 'EMPTY' under the frame.
+ *
+ * The format of this is as follows:
+ *
+ * 		*** RAM CONTENTS ***
+ *
+ * 		Frame 1: job 3
+ * 		line1addaiado
+ * 		line2iodaiodsa
+ *
+ * 		... (etc, middle 6 frames)
+ *
+ * 		Frame 8: job 3
+ * 		line1addaiado
+ * 		line2iodaiodsa
+ *
+ * 		*** CACHE CONTENTS ***
+ *
+ * 		Frame 1: job 3
+ * 		line1addaiado
+ * 		line2iodaiodsa
+ *
+ * 		Frame 2: job 3
+ * 		line1addaiado
+ * 		line2iodaiodsa
+ */
+void dumpMemory(MEMORY *ram, MEMORY *cache, char *output) {
+	// start dumping RAM
+        char *line = malloc(BUFSIZ);
+	strcpy(line,"*** RAM CONTENTS ***\n\n");
+	strcat(output,line);
+
+	// dump each frame and append to output
+	for(int i=0; i<ram->num_frames; i++) {
+		// if an empty frame is
+		if( !dumpFrame(ram,i,true,output) ) {
+			// if this frame is empty, print EMPTY
+			sprintf(line, "Frame %d: \nEMPTY\n\n",i);
+			strcat(output,line);
+			continue;
+		}
+	}
+
+	// start dumping cache
+	strcpy(line,"*** CACHE CONTENTS ***\n\n");
+	strcat(output,line);
+
+	for(int i=0; i<cache->num_frames; i++) {
+		if( !dumpFrame(cache,i,false,output) ) {
+			// if this frame is empty, print EMPTY
+			sprintf(line,"Frame %d: \nEMPTY\n\n",i);
+			strcat(output,line);
+			continue;
+		}
+	}
+}
 
 void simulateNoMemory(char* file, char* sched, int timeQuant){
 
@@ -562,6 +671,12 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 	for (int i = 0; i < MAXTIME; i++) {
 		print[i] = MAXJOBS;
 	}
+	
+	// allocate a string to contain the output of this simulation
+	/* ASSUMPTION: the lines in all job files are, on average, less than 80 chars long
+	 */
+	char* output = calloc( (MAXTIME/memDump * 10) * 220, sizeof(char));
+        
 
 	// ensure that at least one job remains, regardless of whether it has begun execution
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
@@ -580,6 +695,10 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 				int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
 				loadPageToRAM(&ram, harddrive.frames[hdd_framenum], newJob.jobID);
 			}
+		}
+
+		if( time % memDump == 0 ) {
+			dumpMemory(&ram,&cache,output);
 		}
 
 		// if this loop is occupied by an access to ram, ignore all execution operations
@@ -689,6 +808,8 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 
 	printResults(print, time, sched);
 
+	printf(output);
+
 
 
 }
@@ -700,17 +821,13 @@ int main(int argc, char *argv[]){
 	todoJobs = newJOBQ(MAXJOBS);
 	readyJobs = newJOBQ(MAXJOBS);
 
-	/*for(int i=0; i<argc; i++) {
-		printf("%s\n",argv[i]);
-	}*/
-
 	int timeQuant;        //Time quantum for RR scheduling
 	int numJobs;          //Number of Jobs
 	char* sched;          //Type of schedule
 	char* file;           //Name of file that contains jobs
 
-	//printf("argc: %d",argc);
 	
+	// based on the number of arguments, run the correct simulation
 	switch( argc ) {
 
 		// FCFS no memory
@@ -783,6 +900,5 @@ int main(int argc, char *argv[]){
 		default:
 			DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
 	}
-	//simulateWithMemory(file, sched, timeQuant);
 
 }
