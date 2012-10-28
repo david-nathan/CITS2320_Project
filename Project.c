@@ -536,8 +536,13 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
 
 }
 
+/*
+ * Run a simulation with memory. This will use the default access times of 1 for cache memory
+ * and 2 for RAM. The larger hard drive memory has no access cost, but will cause a page fault.
+ */
 void simulateWithMemory(char* file, char* sched, int timeQuant){
 
+	// initialise the three required memory objects and load the lines to harddrive
 	MEMORY harddrive;
 	harddrive = initialiseMemory(0, MAX_PAGES);
 	MEMORY ram;
@@ -546,7 +551,8 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 	cache = initialiseMemory(1,2);
 
 	loadJobFiles(file, harddrive);
-
+	
+	// initialise simulation parameters
 	int time =1;
 	int count = 0;
 	bool ramAccess = false;
@@ -556,8 +562,10 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 		print[i] = MAXJOBS;
 	}
 
+	// ensure that at least one job remains, regardless of whether it has begun execution
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
-
+		
+		// look for new jobs to move to 'ready' at this time
 		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
 			JOB newJob = dequeueJOBQ(todoJobs);
 			jobList[newJob.jobID] = newJob;
@@ -565,8 +573,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 
 			printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
 
-			//TODO load first TWO pages in RAM if new
-			// load the first two pages (four lines) from disk to ram
+			// load the first two pages (four lines) of the new job from disk to ram
 			for(int i=0; i<2; i++) {
 				int pagenum = pagetables[newJob.jobID].pageIndex[newJob.currentline + 2*i];
 				int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
@@ -574,6 +581,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			}
 		}
 
+		// if this loop is occupied by an access to ram, ignore all execution operations
 		if(!ramAccess){
 
 			//IDLE if no ready jobs
@@ -623,7 +631,6 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 					continue;
 				}
 			} else {
-
 				//PROCESS LINE FROM RAM
 				if((frame = pagetables[jid].RAMFrame[pagenum]) != -1){
 					if(!strcmp(sched, FCFS) || ram.accessCost <= timeQuant - count){
@@ -648,6 +655,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 					} else {
 						// if there isn't enough time to move new pages to cache, move on to next job
 						rrUp = true;
+						continue;
 					}
 
 				} else {
@@ -662,14 +670,16 @@ void simulateWithMemory(char* file, char* sched, int timeQuant){
 			//Check for timequantum
 			if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
 				rrUp = true;
+				continue;
 			}
 
 
+		// if loop was ignored due to ram access, increment time and reset to false
 		} else {
 			ramAccess = false;
 			time++;
 		}
-
+		
 	}
 
 	printResults(print, time, sched);
