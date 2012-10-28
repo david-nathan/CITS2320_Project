@@ -87,7 +87,7 @@ MEMORY initialiseMemory(int cost, int num_frames) {
  */
 void processSingleLine(char* line, int jobID){
 	JOB *job = &(jobList[jobID]);
-	printf("line: %s\n", line);
+	//printf("line: %s\n", line);
 
 	//Checks if line is special
 	if(strncmp(line, "if", 2) == 0){
@@ -113,7 +113,7 @@ void processSingleLine(char* line, int jobID){
 
 
 
-		printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
+		//printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
 
 
 
@@ -124,7 +124,7 @@ void processSingleLine(char* line, int jobID){
 			var_index++;
 		}
 
-		printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+		//printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
 
 
 
@@ -420,6 +420,8 @@ void printResults(int *results, int end, char *sched){
 		strcat(result, buffer);
 
 	}
+        
+        printf("%s\n", result);
 
 	strcat(token, "X");
 	size_t start =0;
@@ -438,7 +440,7 @@ void printResults(int *results, int end, char *sched){
 			strcat(token, placeholder);
 		}
 		if(!strcmp(sched, roundRobin)){
-			snprintf(buffer, 4, "%d ", start);
+			snprintf(buffer, 10, "%d ", start);
 			strcat(rrResults[atoi(placeholder)], buffer);
 			strcat(placeholder, "X");
 			strcpy(token, placeholder);
@@ -570,7 +572,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 			jobList[newJob.jobID] = newJob;
 			enqueueJOBQ(newJob, readyJobs);
 
-			printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
+			//printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
 
 			// load the first two pages (four lines) of the new job from disk to ram
 			for(int i=0; i<2; i++) {
@@ -597,7 +599,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 			if(j->currentline == j->length){
 				dequeueJOBQ(readyJobs);
 				count = 0;
-				printf("~~~~~~~~~~Process Died jid = %d at time %d~~~~~~~~~~\n", jid, time);
+				//printf("~~~~~~~~~~Process Died jid = %d at time %d~~~~~~~~~~\n", jid, time);
 				continue;
 			}
 
@@ -622,9 +624,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 					// cost of processing from cache is 1 in the case of this project
 					print[time] = jid;
 
-					//printf("CACHE TIME: %d\n", time);
-
-					printf("CACHE TIME: %d\n", time);
+					//printf("CACHE TIME: %d\n", time);					
 					count++;
 
 					time++;
@@ -643,7 +643,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 							print[time] = jid;
 							print[time+1] = jid;
 
-							printf("RAM TIME: %d\n", time);
+							//printf("RAM TIME: %d\n", time);
 							count += 2;
 
 							time++;
@@ -700,16 +700,16 @@ int main(int argc, char *argv[]){
 	todoJobs = newJOBQ(MAXJOBS);
 	readyJobs = newJOBQ(MAXJOBS);
 
-	for(int i=0; i<argc; i++) {
+	/*for(int i=0; i<argc; i++) {
 		printf("%s\n",argv[i]);
-	}
+	}*/
 
 	int timeQuant;        //Time quantum for RR scheduling
 	int numJobs;          //Number of Jobs
 	char* sched;          //Type of schedule
 	char* file;           //Name of file that contains jobs
 
-	printf("argc: %d",argc);
+	//printf("argc: %d",argc);
 	
 	switch( argc ) {
 
