@@ -700,17 +700,12 @@ int main(int argc, char *argv[]){
 	todoJobs = newJOBQ(MAXJOBS);
 	readyJobs = newJOBQ(MAXJOBS);
 
-	for(int i=0; i<argc; i++) {
-		printf("%s\n",argv[i]);
-	}
-
 	int timeQuant;        //Time quantum for RR scheduling
 	int numJobs;          //Number of Jobs
 	char* sched;          //Type of schedule
 	char* file;           //Name of file that contains jobs
-
-	printf("argc: %d",argc);
 	
+	// based on the number of arguments, run the correct simulation
 	switch( argc ) {
 
 		// FCFS no memory
@@ -783,6 +778,5 @@ int main(int argc, char *argv[]){
 		default:
 			DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
 	}
-	//simulateWithMemory(file, sched, timeQuant);
 
 }
