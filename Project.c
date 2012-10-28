@@ -677,10 +677,6 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 	// ensure that at least one job remains, regardless of whether it has begun execution
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
 
-		if( time % memDump == 0 ) {
-			dumpMemory(&ram,&cache,output);
-		}
-	
 		// look for new jobs to move to 'ready' at this time
 		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
 			JOB newJob = dequeueJOBQ(todoJobs);
@@ -695,6 +691,10 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 				int hdd_framenum = pagetables[newJob.jobID].hdd_frameIndex[pagenum];
 				loadPageToRAM(&ram, harddrive.frames[hdd_framenum], newJob.jobID);
 			}
+		}
+
+		if( time % memDump == 0 ) {
+			dumpMemory(&ram,&cache,output);
 		}
 
 		// if this loop is occupied by an access to ram, ignore all execution operations
