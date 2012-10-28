@@ -700,39 +700,63 @@ int main(int argc, char *argv[]){
 	todoJobs = newJOBQ(MAXJOBS);
 	readyJobs = newJOBQ(MAXJOBS);
 
-	if(argc < 3 || argc > 4){//Test for correct number of arguments
-		DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
+	for(int i=0; i<argc; i++) {
+		printf("%s\n",argv[i]);
 	}
-
-
 
 	int timeQuant;        //Time quantum for RR scheduling
 	int numJobs;          //Number of Jobs
 	char* sched;          //Type of schedule
 	char* file;           //Name of file that contains jobs
 
-	if(argc==3){
-		sched = argv[1];
-		if(strcmp(sched, roundRobin) == 0){
-			DieWithUserMessage("Parameter(s)", "<Time Quantum>");
-		}
-		if(strcmp(sched, FCFS) == 0){
-			file = argv[2];
-			timeQuant = 1;
-		} else {
-			DieWithUserMessage("Parameter(s)", "<Schedule Type>");
-		}
-	}
+	switch( argc ) {
+	
+		// FCFS no memory
+		case 3: 
+			sched = argv[1];
+			if(strcmp(sched, roundRobin) == 0) {
+				DieWithUserMessage("Parameter(s)", "<Time Quantum>");
+			}
+			if(strcmp(sched, FCFS) == 0) {
+				file = argv[2];
+				timeQuant = 1;
+				simulateNoMemory(file,sched,timeQuant);
+			} else {
+				DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+			}
 
-	if(argc==4){
-		sched = argv[1];                      //Type of schedule
-
-		if(strcmp(sched, roundRobin) == 0){
-			timeQuant = atoi(argv[2]);      //Set time quantum
-			file = argv[3];                 //Name of file that contains jobs
-		}else{
-			DieWithUserMessage("Parameter(s)", "<Schedule Type>");
-		}
+		// RR no memory
+		case 4:
+			sched = argv[1];                      //Type of schedule
+			if(strcmp(sched, roundRobin) == 0) {
+				timeQuant = atoi(argv[2]);      //Set time quantum
+				file = argv[3];                 //Name of file that contains jobs
+				simulateNoMemory(file,sched,timeQuant);
+			} else {
+				DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+			}
+		
+		// FCFS with memory
+		case 5:
+			sched = argv[3];                      //Type of schedule
+			if(strcmp(sched, roundRobin) == 0) {
+				DieWithUserMessage("Parameter(s)", "<Time Quantum>");
+			}
+			if(strcmp(sched, FCFS) == 0) {
+				int memDump = atoi(argv[2]);      //Set time quantum
+				file = argv[4];                 //Name of file that contains jobs
+				simulateNoMemory(file,sched,timeQuant);
+			} else {
+				DieWithUserMessage("Parameter(s)", "<Schedule Type>");
+			}
+		
+		// RR with memory
+		case 6:
+		
+		
+		// otherwise wrong number of arguments, exit with error message
+		default:
+			DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
 	}
 
 	simulateWithMemory(file, sched, timeQuant);
