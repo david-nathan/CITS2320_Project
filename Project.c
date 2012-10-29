@@ -583,7 +583,6 @@ void dumpMemory(MEMORY *ram, MEMORY *cache, char *output, bool firstJobStarted) 
 		}
 	}
 	
-	line = NULL;
 	free(line);
 }
 
@@ -830,9 +829,13 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 
 	}
 
-	printf(output);
+	
 	printResults(print, time, sched);
 
+	FILE *f;
+	f = fopen(outFile, "w");
+	fprintf(f, output);
+	fclose(f);
 
 
 }
