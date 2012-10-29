@@ -87,10 +87,16 @@ MEMORY initialiseMemory(int cost, int num_frames) {
  */
 void processSingleLine(char* line, int jobID){
 	JOB *job = &(jobList[jobID]);
-	//printf("line: %s\n", line);
+        char *copy = calloc(1, BUFSIZ);
+        //Create Copy of line so it is not altered in strtok
+        strcpy(copy, line);
+        
+	//printf("JID: %s line: %s\n",job->filename, line);
 
 	//Checks if line is special
+        
 	if(strncmp(line, "if", 2) == 0){
+            
 		char tok_str[9][BUFSIZ];
 		char *token;
 		char var;
@@ -100,7 +106,7 @@ void processSingleLine(char* line, int jobID){
 		int n = 0;
 
 		//Isolates tokens in the given line that are separated by whitespace or tab spaces
-		if((token = strtok(line, " \t")) != NULL){
+		if((token = strtok(copy, " \t")) != NULL){
 			do{
 				strcpy(tok_str[n], token);
 				n++;
@@ -124,7 +130,7 @@ void processSingleLine(char* line, int jobID){
 			var_index++;
 		}
 
-		printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+		
 
 
                 //Create Variable
@@ -140,13 +146,17 @@ void processSingleLine(char* line, int jobID){
 		}
 
 		//process line
-		if (job->var_values[var_index] < compare) {
+		              
+                   if (job->var_values[var_index] < compare) {
 			job->var_values[var_index] = job->var_values[var_index] + 1;
 			job->currentline = linenum;
-		} else {
-			job->currentline = job->currentline + 1;
-		}
-
+		   } else {
+                       job->currentline = job->currentline + 1;
+                       
+                   }
+                
+               //printf("LINE VARIABLE: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+               //printf("CURRENTLINE %s: %d\n",job->filename, job->currentline);
 	} else {
 		job->currentline = job->currentline + 1;
 	}
@@ -354,8 +364,8 @@ void loadJobFiles(char* file, MEMORY harddrive) {
 			if(linecount == 0){
 				newJob.start = atoi(buffer);
 				linecount++;
+                                continue;
 			}
-
 
 			if(linecount %2 != 0){
 				//Create new page and add to harddrive
@@ -376,7 +386,6 @@ void loadJobFiles(char* file, MEMORY harddrive) {
 			} else {
 				//Even line number
 				harddrive.frames[hdFrameCount - 1].data[1] = strdup(buffer);
-
 				pagetables[jobID].pageIndex[linecount] = pagecount-1;
 			}
 
@@ -648,7 +657,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
 		int pagenum = pagetables[jid].pageIndex[j->currentline];
 		int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
 		PAGE current_page = harddrive.frames[hdd_framenum];
-		char* line = current_page.data[(jobList[jid].currentline+1)%2]; //odd line is data[0]
+		char* line = current_page.data[(jobList[jid].currentline+1)%2]; //odd line is data[0]                              
 		processSingleLine(line, jid);
 		print[time] = jid;
 		time++;
