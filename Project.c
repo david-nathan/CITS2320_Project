@@ -124,10 +124,10 @@ void processSingleLine(char* line, int jobID){
 			var_index++;
 		}
 
-		//printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
+		printf("REACHED: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
 
 
-
+                //Create Variable
 		if (var_index == job->num_vars) {
 			//variable does not exist, create a new variable with value 0
 			job->vars[job->num_vars] = var;
@@ -401,10 +401,10 @@ void loadJobFiles(char* file, MEMORY harddrive) {
 
 void printResults(int *results, int end, char *sched){
 
-	char* buffer = malloc(BUFSIZ);
-	char* result = malloc(BUFSIZ);
-	char* token = malloc(BUFSIZ);
-	char* placeholder = malloc(BUFSIZ);
+	char* buffer = calloc(1,BUFSIZ);
+	char* result = calloc(1,BUFSIZ);
+	char* token = calloc(1,BUFSIZ);
+	char* placeholder = calloc(1,BUFSIZ);
 	char rrResults[MAXJOBS][BUFSIZ];
 
 	for(int i =0; i< end; i++){
@@ -508,7 +508,7 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
 	
 	// finally, append the dump of this frame to the output string
 	strcat(output,nextline);
-    free(line);
+        free(line);
 	free(nextline);
 	return true;
 }
