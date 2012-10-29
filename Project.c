@@ -88,6 +88,7 @@ MEMORY initialiseMemory(int cost, int num_frames) {
 void processSingleLine(char* line, int jobID){
 	JOB *job = &(jobList[jobID]);
         char *copy = calloc(1, BUFSIZ);
+        //printf("%s: %s\n", job->filename, line);
         //Create Copy of line so it is not altered in strtok
         strcpy(copy, line);
         
@@ -434,7 +435,6 @@ void printResults(int *results, int end, char *sched){
 
 	}
         
-        printf("%s\n", result);
 
 	strcat(token, "X");
 	size_t start =0;
@@ -635,7 +635,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
 		JOB *j = &jobList[jid];
 
 		//If Job is finished
-		if(j->currentline == j->length){
+		if(j->currentline == j->length+1){
 			dequeueJOBQ(readyJobs);
 			count = 0;
 			continue;
@@ -665,7 +665,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant){
 
 
 		//Check for timequantum
-		if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
+		if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length + 1){
 			rrUp = true;
 		}
 	}
@@ -748,7 +748,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 			JOB *j = &jobList[jid];
 
 			//If Job is finished
-			if(j->currentline == j->length){
+			if(j->currentline == j->length +1){
 				dequeueJOBQ(readyJobs);
 				count = 0;
 				//printf("~~~~~~~~~~Process Died jid = %d at time %d~~~~~~~~~~\n", jid, time);
@@ -825,7 +825,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 
 
 			//Check for timequantum
-			if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length){
+			if(!strcmp(sched,roundRobin) && count == timeQuant && j->currentline != j->length+1){
 				rrUp = true;
 				continue;
 			}
@@ -920,10 +920,7 @@ int main(int argc, char *argv[]){
 			if(strcmp(argv[1],"-m") == 0) {
 				if(strcmp(sched, roundRobin) == 0) {
 					int memDump = atoi(argv[2]);
-					timeQuant = atoi(argv[4]);		//Set time quantum
-					if(timeQuant < 3) {
-						DieWithUserMessage("Error","Please choose a larger time quantum.");
-					}
+					timeQuant = atoi(argv[4]);		//Set time quantum				        
 					file = argv[5];                 //Name of file that contains jobs
 					char* outFile = argv[6];
 					simulateWithMemory(file,sched,timeQuant,memDump,outFile);
