@@ -487,26 +487,28 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
 			}
 		}
 	}
-
 	// if no job has been found, the frame must be empty
 	if(jid == -1) {
 		return false;
 	}
+	if(m->frames[frame].data[0] == NULL && m->frames[frame].data[1] == NULL) {
+		return false;
+	}
 
-	char *nextline = malloc(BUFSIZ);
-	char *line = malloc(BUFSIZ);
+	char *nextline = calloc(BUFSIZ,1);
+	char *line = calloc(BUFSIZ,1);
 	sprintf(line,"Frame %d: job %d\n",frame,jid);
-	//printf("HERE2: %d\n",frame);
-	// append the two lines and an extra newline to separate frames
+	//printf("HERE: %d\n %s\n",frame,m->frames[frame].data[1]);
+	// append the two lines
 	strcat(nextline,line);
 	strcat(nextline,m->frames[frame].data[0]);
-	strcat(nextline,m->frames[frame].data[1]);
 	strcat(nextline,"\n");
-	//printf("HERE2: %d\n",frame);
-
+	strcat(nextline,m->frames[frame].data[1]);
+	strcat(nextline,"\n\n");
+	
 	// finally, append the dump of this frame to the output string
 	strcat(output,nextline);
-        free(line);
+    free(line);
 	free(nextline);
 	return true;
 }
@@ -542,18 +544,17 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
  */
 void dumpMemory(MEMORY *ram, MEMORY *cache, char *output) {
 	// start dumping RAM
-        char *line = malloc(BUFSIZ);
+    char *line = malloc(BUFSIZ);
 	strcpy(line,"*** RAM CONTENTS ***\n\n");
 	strcat(output,line);
 
 	// dump each frame and append to output
 	for(int i=0; i<ram->num_frames; i++) {
-		// if an empty frame is
-		if( !dumpFrame(ram,i,true,output) ) {
+		bool empty = !dumpFrame(ram,i,true,output);
+		if( empty ) {
 			// if this frame is empty, print EMPTY
 			sprintf(line, "Frame %d: \nEMPTY\n\n",i);
 			strcat(output,line);
-			continue;
 		}
 	}
 
@@ -569,6 +570,9 @@ void dumpMemory(MEMORY *ram, MEMORY *cache, char *output) {
 			continue;
 		}
 	}
+	
+	line = NULL;
+	free(line);
 }
 
 void simulateNoMemory(char* file, char* sched, int timeQuant){
@@ -681,7 +685,6 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 	 */
 	char* output = calloc( (MAXTIME/memDump * 10) * 220, sizeof(char));
         
-
 	// ensure that at least one job remains, regardless of whether it has begun execution
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
 
@@ -810,9 +813,8 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 
 	}
 
-	printResults(print, time, sched);
-
 	printf(output);
+	printResults(print, time, sched);
 
 
 
