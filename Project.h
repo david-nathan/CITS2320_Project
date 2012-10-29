@@ -1,4 +1,9 @@
-
+/* 
+ * File:   Project.c
+ * Author: David Nathan 20356245
+ *
+ * Created on October 29, 2012, 5:29 PM
+ */
 
 #define MAXVARS 10
 #define MAXTIME 1000
