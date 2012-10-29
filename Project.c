@@ -314,7 +314,7 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 		removeFromCache(cache,1);
 		// add the new pages and update the LRU array in ram
 		addToCache(cache, getPage(harddrive,jid,line), 0, jid);
-		addToCache(cache, getPage(harddrive,jid,nextLine), 1, jid);
+		addToCache(cache, getPage(harddrive,jid,nextLine+1), 1, jid);
 		updateLRU(ram, frame);
 		updateLRU(ram, pagetables[jid].RAMFrame[nextPage]);
 	}
@@ -365,6 +365,7 @@ void loadJobFiles(char* file, MEMORY harddrive) {
 				newJob.start = atoi(buffer);
 				linecount++;
                                 continue;
+
 			}
 
 			if(linecount %2 != 0){
@@ -507,7 +508,7 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
 
 	char *nextline = calloc(BUFSIZ,1);
 	char *line = calloc(BUFSIZ,1);
-	sprintf(line,"Frame %d: job %d\n",frame,jid);
+	sprintf(line,"Frame %d: %s\n",frame,jobList[jid].filename);
 	//printf("HERE: %d\n %s\n",frame,m->frames[frame].data[1]);
 	// append the two lines
 	strcat(nextline,line);
@@ -592,7 +593,6 @@ void dumpMemory(MEMORY *ram, MEMORY *cache, char *output, bool firstJobStarted) 
 		}
 	}
 	
-	line = NULL;
 	free(line);
 }
 
@@ -730,7 +730,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 			}
 		}
 
-		if( time % memDump == 0 ) {
+		if( time == memDump ) {
 			dumpMemory(&ram,&cache,output,firstJobStarted);
 		}
 
@@ -839,9 +839,13 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 
 	}
 
-	printf(output);
+	
 	printResults(print, time, sched);
 
+	FILE *f;
+	f = fopen(outFile, "w");
+	fprintf(f, output);
+	fclose(f);
 
 
 }
@@ -917,6 +921,9 @@ int main(int argc, char *argv[]){
 				if(strcmp(sched, roundRobin) == 0) {
 					int memDump = atoi(argv[2]);
 					timeQuant = atoi(argv[4]);		//Set time quantum
+					if(timeQuant < 3) {
+						DieWithUserMessage("Error","Please choose a larger time quantum.");
+					}
 					file = argv[5];                 //Name of file that contains jobs
 					char* outFile = argv[6];
 					simulateWithMemory(file,sched,timeQuant,memDump,outFile);
