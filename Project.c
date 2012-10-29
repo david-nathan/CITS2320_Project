@@ -468,6 +468,7 @@ void printResults(int *results, int end, char *sched){
  * and returns the memory dump of the specified frame in this string.
  */
 bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
+	
 	int jid = -1;
 
 	// find the job associated with this page
@@ -542,16 +543,21 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
  * 		line1addaiado
  * 		line2iodaiodsa
  */
-void dumpMemory(MEMORY *ram, MEMORY *cache, char *output) {
+void dumpMemory(MEMORY *ram, MEMORY *cache, char *output, bool firstJobStarted) {
 	// start dumping RAM
-    char *line = malloc(BUFSIZ);
+    char *line = calloc(BUFSIZ,1);
 	strcpy(line,"*** RAM CONTENTS ***\n\n");
 	strcat(output,line);
 
 	// dump each frame and append to output
 	for(int i=0; i<ram->num_frames; i++) {
-		bool empty = !dumpFrame(ram,i,true,output);
-		if( empty ) {
+		if(!firstJobStarted) {
+			// if this frame is empty, print EMPTY
+			sprintf(line, "Frame %d: \nEMPTY\n\n",i);
+			strcat(output,line);
+			continue;
+		}
+		if( !dumpFrame(ram,i,true,output) ) {
 			// if this frame is empty, print EMPTY
 			sprintf(line, "Frame %d: \nEMPTY\n\n",i);
 			strcat(output,line);
@@ -563,6 +569,12 @@ void dumpMemory(MEMORY *ram, MEMORY *cache, char *output) {
 	strcat(output,line);
 
 	for(int i=0; i<cache->num_frames; i++) {
+		if(!firstJobStarted) {
+			// if this frame is empty, print EMPTY
+			sprintf(line, "Frame %d: \nEMPTY\n\n",i);
+			strcat(output,line);
+			continue;
+		}
 		if( !dumpFrame(cache,i,false,output) ) {
 			// if this frame is empty, print EMPTY
 			sprintf(line,"Frame %d: \nEMPTY\n\n",i);
@@ -685,11 +697,16 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 	 */
 	char* output = calloc( (MAXTIME/memDump * 10) * 220, sizeof(char));
         
+	bool firstJobStarted = false;
 	// ensure that at least one job remains, regardless of whether it has begun execution
 	while( !isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs) ) {
 
 		// look for new jobs to move to 'ready' at this time
 		while( !isEmptyJOBQ(todoJobs) && (peekJOBQ(todoJobs).start == time) ) {
+			if(!firstJobStarted) {
+				firstJobStarted = true;
+			}
+			
 			JOB newJob = dequeueJOBQ(todoJobs);
 			jobList[newJob.jobID] = newJob;
 			enqueueJOBQ(newJob, readyJobs);
@@ -705,7 +722,7 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
 		}
 
 		if( time % memDump == 0 ) {
-			dumpMemory(&ram,&cache,output);
+			dumpMemory(&ram,&cache,output,firstJobStarted);
 		}
 
 		// if this loop is occupied by an access to ram, ignore all execution operations
