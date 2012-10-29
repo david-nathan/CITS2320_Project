@@ -245,11 +245,14 @@ void addToCache(MEMORY *cache, PAGE p, int frame, int jid) {
 void removeFromCache(MEMORY *cache, int frame) {
 	int pageNumber = cache->frames[frame].page_number;
 
-	for(int i=0; i<MAXJOBS; i++) {
+        
+        for(int i=0; i< MAXJOBS; i++){
 		// find the relevant page table and update it
-		if( pagetables[i].cacheFrame[pageNumber] == frame ) {
+
+               if( pagetables[i].cacheFrame[pageNumber] == frame ) {
 			pagetables[i].cacheFrame[pageNumber] = -1;
 		}
+                
 	}
 }
 /*
@@ -286,7 +289,7 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
 		// if the next line is beyond the length of the job, allow one page to be moved to cache
 	} else if ( nextPage == -1 ) {
 		// delete previous page from cache
-		removeFromCache(cache,frame);
+		removeFromCache(cache,0);
 		// arbitrarily move the current page it to the first frame in cache
 		PAGE p = getPage(harddrive,jid,line);
 		cache->frames[0] = p;
@@ -414,7 +417,7 @@ void printResults(int *results, int end, char *sched){
 		if(results[i] == MAXJOBS){
 			snprintf(buffer,10,"%s", "X");
 		} else {
-			snprintf(buffer, 2, "%d", results[i]);
+			snprintf(buffer, 10, "%d", results[i]);
 		}
 
 		strcat(result, buffer);
@@ -472,7 +475,7 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
 	for(int j=0; j<MAXJOBS; j++) {
 		// look for the frame in the appropriate page table
 		if(ram) {
-			printf("HERE ram: %d %d\n",frame,j);
+			//printf("HERE ram: %d %d\n",frame,j);
 			if( pagetables[j].RAMFrame[pageNumber] == frame ) {
 				jid = j;
 				break;
@@ -493,16 +496,17 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
 	char *nextline = malloc(BUFSIZ);
 	char *line = malloc(BUFSIZ);
 	sprintf(line,"Frame %d: job %d\n",frame,jid);
-	printf("HERE2: %d\n",frame);
+	//printf("HERE2: %d\n",frame);
 	// append the two lines and an extra newline to separate frames
 	strcat(nextline,line);
 	strcat(nextline,m->frames[frame].data[0]);
 	strcat(nextline,m->frames[frame].data[1]);
 	strcat(nextline,"\n");
-	printf("HERE2: %d\n",frame);
+	//printf("HERE2: %d\n",frame);
 
 	// finally, append the dump of this frame to the output string
 	strcat(output,nextline);
+        free(line);
 	free(nextline);
 	return true;
 }
