@@ -1,6 +1,6 @@
 /* 
- * File:   Project.c
- * Author: David Nathan 20356245
+ * File:   Project.h
+ * Author: David Nathan 20356245 Daniel Hunt 20350022
  *
  * Created on October 29, 2012, 5:29 PM
  */
@@ -11,6 +11,8 @@
 #define MAX_JOB_LENGTH 100
 #define MAX_PAGES ((MAX_JOB_LENGTH * MAXJOBS + 1)/2)
 
+#define EOL    '\n'
+#define CARRIAGE_RETURN    '\r'
 
 typedef struct {
     
@@ -31,8 +33,6 @@ typedef struct {
     int maxElements;
 }JOBQ;
 
-
-
 /* Structure for page information*/
 typedef struct {
     /* page number for a given frame */
@@ -40,7 +40,6 @@ typedef struct {
     /* First two lines of file that are stored in the page*/
     char *data[2]; //needs to be calloc'd at  runtime
 } PAGE;
-
 
 typedef struct {
 	// get the page index of a given line
@@ -69,3 +68,4 @@ typedef struct {
     int *LRU;
     
 } MEMORY;
+

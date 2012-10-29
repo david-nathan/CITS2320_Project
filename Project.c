@@ -1,11 +1,9 @@
 /* 
  * File:   Project.c
- * Author: David Nathan 20356245
+ * Author: David Nathan 20356245 Daniel Hunt 20350022
  *
  * Created on October 29, 2012, 5:29 PM
  */
-
-
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,11 +12,7 @@
 #include <assert.h> 
 #include "Project.h"
 
-#define EOL    '\n'
-#define CARRIAGE_RETURN    '\r'
-
-
-//declaration of external functions
+//Declaration of external functions
 extern char *strdup(const char *);
 extern void enqueueJOBQ(JOB element, JOBQ *q);
 extern JOBQ *newJOBQ(int size);
@@ -27,10 +21,10 @@ extern JOB peekJOBQ(JOBQ *q);
 extern JOB dequeueJOBQ(JOBQ *q);
 extern void sortJOBQ(JOBQ *q);
 
-//declaration of global constants
-const char * FCFS = "FCFS";
-const char * roundRobin = "RR";
+//Declaration of global constants
 
+const char* FCFS = "FCFS";
+const char* roundRobin = "RR";
 
 /*========= GLOBAL VARIABLES =========*/
 
@@ -45,23 +39,11 @@ PAGETABLE pagetables[MAXJOBS];
 
 /*========= HELPER FUNCTIONS =========*/
 
-/*For non-standard errors*/
-void DieWithUserMessage(const char *msg, const char *detail) {
-    fputs(msg, stderr);
-    fputs(": ", stderr);
-    fputs(detail, stderr);
-    fputc('\n', stderr);
-    exit(1);
-}
-
-/*For standard system errors*/
-void DieWithSystemMessage(const char *msg) {
-    perror(msg);
-    exit(1);
-}
-
-/*Function to remove carriage-return or end-of-line character from a string*/
-void trimLine(char line[]) {
+/**
+ * Function to remove carriage-return or end-of-line character from a string
+ * @param line
+ */
+static void trimLine(char line[]) {
     int i = 0;
     while (line[i] != '\0') {
         if (line[i] == CARRIAGE_RETURN || line[i] == EOL) {
@@ -71,6 +53,243 @@ void trimLine(char line[]) {
     }
 }
 
+/**
+ * For non-standard errors
+ * @param msg
+ * @param detail
+ */
+static void DieWithUserMessage(const char *msg, const char *detail) {
+    fputs(msg, stderr);
+    fputs(": ", stderr);
+    fputs(detail, stderr);
+    fputc('\n', stderr);
+    exit(1);
+}
+
+/**
+ * For standard system errors
+ * @param msg
+ */
+static void DieWithSystemMessage(const char *msg) {
+    perror(msg);
+    exit(1);
+}
+
+/*========= FUNCTIONS MEMORY AND NOMEMORY SIMULATIONS =========*/
+
+void loadJobFiles(char* infile, MEMORY harddrive) {
+
+    FILE *fp = fopen(infile, "r");
+    if (fp == NULL) {       //Test that the infile can be opened
+        DieWithSystemMessage("Unable to open JOB-List file");
+    }
+
+    int jobID = 0;          //Assigns jobID according to position in infile not job start time
+    int hdFrameCount = 0;   //Count for the frames
+    char jobFile[BUFSIZ];   //Buffer to hold the filename for a JOB
+
+    while (fgets(jobFile, sizeof (jobFile), fp) != NULL) {  //Reads a newline-terminated  string from infile stream
+        trimLine(jobFile);                                  //Remove trailing characters
+        FILE *fpJob = fopen(jobFile, "r");
+        if (fpJob == NULL) {
+            DieWithSystemMessage("Unable to open JOB file");//Test that JOB file can be opened
+        }
+
+        char buffer[BUFSIZ]; //A buffer to hold each line in a JOB
+        int linecount = 0;   //A count of which line is being read in
+        int pagecount = 0;   //A count of which page is being created
+   
+        //Initialize a new JOB structure
+        JOB newJob;
+        newJob.currentline = 1;
+        newJob.num_vars = 0;
+        newJob.jobID = jobID;
+        newJob.filename = strdup(jobFile);
+
+        while (fgets(buffer, sizeof (buffer), fpJob) != NULL) { //Reads a newline-terminated string from JOB-file stream
+            trimLine(buffer);                                   //Remove trailing characters
+
+            if (linecount == 0) {  //If first line in a JOB, store the value as the start time. 
+                newJob.start = atoi(buffer);
+                linecount++;
+                continue;
+            }
+
+            if (linecount % 2 != 0) { //Odd line number
+                //Create new page and add to harddrive
+                PAGE page;
+                page.data[0] = strdup(buffer);
+                page.page_number = pagecount;
+                harddrive.frames[hdFrameCount] = page; //Add page to harddrive
+
+                //Update page table
+                pagetables[jobID].pageIndex[linecount] = pagecount;
+                pagetables[jobID].hdd_frameIndex[pagecount] = hdFrameCount;
+                pagetables[jobID].RAMFrame[pagecount] = -1; //False, since it isn't in RAM
+                pagetables[jobID].cacheFrame[pagecount] = -1; //False, since it isn't in CACHE
+
+                pagecount++;
+                hdFrameCount++;
+            } else { //Even line number
+                //Update page table
+                harddrive.frames[hdFrameCount - 1].data[1] = strdup(buffer);
+                pagetables[jobID].pageIndex[linecount] = pagecount - 1;
+            }
+            linecount++;
+        }
+        newJob.length = linecount - 1;
+
+        //Add new Job to queue of Jobs that haven't started 
+        enqueueJOBQ(newJob, todoJobs);
+        jobID++;
+        fclose(fpJob);
+    }
+    sortJOBQ(todoJobs); //Sort todoJobs according to start time
+}
+
+/**
+ * Reads in a single line from a Job file and processes it.
+ * Checks if it is a special line and processes it accordingly.
+ * @param line
+ * @param jobID
+ */
+void processSingleLine(char* line, int jobID) {
+    JOB *job = &(jobList[jobID]);
+    char *copy = calloc(1, BUFSIZ);
+   
+    strcpy(copy, line);                //Create Copy of line so that it's not altered in strtok
+
+    //Check if line is special by comparing first two characters to 'if'
+    if (strncmp(line, "if", 2) == 0) {
+
+        char tok_str[9][BUFSIZ];       //Array to hold the 9 tokens in a special line
+        char *token;                   //A Buffer to hold the token
+        char var;                      //The variable that is being evaluated in the line
+        int linenum;                   //The line number that the goto returns to
+        int compare;                   //The value that the variable is compared against
+
+        int n = 0;                     //Count for the strtok while-loop
+
+                                            
+        if ((token = strtok(copy, " \t")) != NULL) { //Isolates tokens in line that are separated by whitespace or tab spaces
+            do {
+                strcpy(tok_str[n], token);           //Copies token into Array
+                n++;
+            } while ((token = strtok(NULL, " \t")) != NULL);
+        }
+
+        var = tok_str[1][0];           //Takes the first byte of the second element in the array NOTE: multibyte characters will not be stored 
+        linenum = atoi(tok_str[8]);    //Assign string to integer for linenum
+        compare = atoi(tok_str[3]);    //Assign string to integer for compare
+
+        //printf("PARSED LINE: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
+
+        //Check if variable already exists
+        int var_index = 0;
+        while (var_index < job->num_vars && job->vars[var_index] != var) {
+            var_index++;
+        }
+
+        //Create Variable
+        if (var_index == job->num_vars) {
+            //variable does not exist, create a new variable with value 0
+            job->vars[job->num_vars] = var;
+            job->var_values[job->num_vars] = 0;
+            //check if max number of variables has been reached
+            if (job->num_vars == MAXVARS) {
+                DieWithUserMessage("Max Variables", "The maximum allow number of variables for a job has been exceeded");
+            }
+            job->num_vars = job->num_vars + 1;
+        }
+
+        //Evaluate line
+        if (job->var_values[var_index] < compare) {
+            job->var_values[var_index] = job->var_values[var_index] + 1;
+            job->currentline = linenum;
+        } else {
+            job->currentline = job->currentline + 1;
+
+        }
+        //printf("JOB %s VARIABLE: vars[%d] = %c = %d\n",job->filename, var_index, job->vars[var_index], job->var_values[var_index]);
+    } else {
+        //Non-special line and so move to the next line
+        job->currentline = job->currentline + 1;
+    }
+}
+
+/**
+ * Prints a summary of the simulation from an integer array, indexed by jobID,
+ * by turning it into a string and isolating substrings of jobIDs.
+ * @param results Array of jobIDs indexed by when they are processing
+ * @param end     Last time-unit that was used in simulation
+ * @param sched   Type of scheduling used
+ */
+void printResults(int *results, int end, char *sched) {
+    
+    printf("========== SUMMARY OF RESULTS ============\n\n");
+    
+    char* buffer = calloc(1, BUFSIZ);//Buffer for snprintf that holds 10 Bytes
+    char* result = calloc(1, BUFSIZ);      //A string that holds the summary
+    char* token = calloc(1, BUFSIZ);       //A string that holds the characters that act as tokens
+    char* placeholder = calloc(1, BUFSIZ); //A string that holds all characters that have been encountered
+    char rrResults[MAXJOBS][BUFSIZ];       //an array of job filenames for RR simulations
+
+    for (int i = 0; i < end; i++) {
+        if (results[i] == MAXJOBS) { //If value at specified is the default value then replace it with an X
+            snprintf(buffer, 10, "%s", "X");        //Writes at most 10 bytes from the string 'X' to buffer
+        } else {
+            snprintf(buffer, 10, "%d", results[i]); //Writes at most 10 bytes from results integer array  to buffer
+        }
+        strcat(result, buffer); //Concatenate buffer to result
+    }
+
+    //printf("RESULTS: %s\n",result);
+    
+    strcat(token, "X"); //Add idle-character to tokens
+    int start = 0;   //Position of start 
+    size_t position = 0;
+    int length = 0;
+
+    while ((position = strspn(result, token)) != strlen(result)) { //Determines the length of string made entirely from characters in token
+
+        start += position; //Set the start position of a JOB
+        result += position;//Move the pointer along
+        strncpy(placeholder, result, 1); //Copy first character in result string to placeholder
+        length = strspn(result, placeholder); //Determines the length string made of characters already encounterd. Used in FCFS
+
+        if (!strcmp(sched, FCFS)) { //If FCFS then print to stdout start and end times
+            printf("%s %d %d\n", jobList[atoi(placeholder)].filename, start, start + length - 1);
+            strcat(token, placeholder); //Add placeholder to set of characters already encountered in token
+        }
+        if (!strcmp(sched, roundRobin)) { //If RR then write to the array of results
+            snprintf(buffer, 10, "%d ", start);
+            strcat(rrResults[atoi(placeholder)], buffer);
+            strcat(placeholder, "X");
+            strcpy(token, placeholder);
+        }
+    }
+
+    if (!strcmp(sched, roundRobin)) { //If RR then print the results now.
+        int i = 0;
+        while (jobList[i].filename != NULL) {
+            printf("%s %s\n", jobList[i].filename, rrResults[i]);
+            i++;
+        }
+    }
+    
+    free(buffer);
+    free(token);
+    free(placeholder);
+}
+
+/*========= HELPER FUNCTIONS FOR MEMORY =========*/
+
+/**
+ * Allocates space for a MEMORY structure
+ * @param cost The Access Cost
+ * @param num_frames
+ * @return The MEMORY structure
+ */
 MEMORY initialiseMemory(int cost, int num_frames) {
     // initialise parameters and allocate space for arrays
     MEMORY m;
@@ -88,88 +307,12 @@ MEMORY initialiseMemory(int cost, int num_frames) {
 }
 
 /**
- * Reads in a single line from a Job file and processes it.
- * Checks if it is a special line and carries out the functionality accordingly.
- *
+ * If line is from CACHE, determines which line from frame is needed
+ * and then processes it.
+ * @param cacheFrame
+ * @param cache
+ * @param jid
  */
-void processSingleLine(char* line, int jobID) {
-    JOB *job = &(jobList[jobID]);
-    char *copy = calloc(1, BUFSIZ);
-    //printf("%s: %s\n", job->filename, line);
-    //Create Copy of line so it is not altered in strtok
-    strcpy(copy, line);
-
-    //printf("JID: %s line: %s\n",job->filename, line);
-
-    //Checks if line is special
-
-    if (strncmp(line, "if", 2) == 0) {
-
-        char tok_str[9][BUFSIZ];
-        char *token;
-        char var;
-        int linenum;
-        int compare;
-
-        int n = 0;
-
-        //Isolates tokens in the given line that are separated by whitespace or tab spaces
-        if ((token = strtok(copy, " \t")) != NULL) {
-            do {
-                strcpy(tok_str[n], token);
-                n++;
-            } while ((token = strtok(NULL, " \t")) != NULL);
-        }
-
-        var = tok_str[1][0];
-        linenum = atoi(tok_str[8]);
-        compare = atoi(tok_str[3]);
-
-
-
-        //printf("PARSED LINE READS: if %c<%d %c=%c+1 goto %d\n", var, compare, var, var, linenum);
-
-
-
-
-        //Check if variable already exists and if not create a new one
-        int var_index = 0;
-        while (var_index < job->num_vars && job->vars[var_index] != var) {
-            var_index++;
-        }
-
-
-
-
-        //Create Variable
-        if (var_index == job->num_vars) {
-            //variable does not exist, create a new variable with value 0
-            job->vars[job->num_vars] = var;
-            job->var_values[job->num_vars] = 0;
-            //check if max number of variables has been reached
-            if (job->num_vars == MAXVARS) {
-                DieWithUserMessage("Max Variables", "The maximum allow number of variables for a job has been exceeded");
-            }
-            job->num_vars = job->num_vars + 1;
-        }
-
-        //process line
-
-        if (job->var_values[var_index] < compare) {
-            job->var_values[var_index] = job->var_values[var_index] + 1;
-            job->currentline = linenum;
-        } else {
-            job->currentline = job->currentline + 1;
-
-        }
-
-        //printf("LINE VARIABLE: vars[%d] = %c = %d\n", var_index, job->vars[var_index], job->var_values[var_index]);
-        //printf("CURRENTLINE %s: %d\n",job->filename, job->currentline);
-    } else {
-        job->currentline = job->currentline + 1;
-    }
-}
-
 void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
     // determine if the line to be processed is an even or odd line
     int line = (jobList[jid].currentline + 1) % 2;
@@ -177,10 +320,12 @@ void processLineFromCache(int cacheFrame, MEMORY *cache, int jid) {
     processSingleLine(data, jid);
 }
 
-/*
+/**
  * Find the pagetable corresponding to the page in 'frame' and update it to -1 to
  * effectively remove this page from ram. Note: the data in the frame will remain, so
  * this function should only be used in conjunction with a reallocation of this frame.
+ * @param ram
+ * @param frame
  */
 void removeFromRAM(MEMORY *ram, int frame) {
     int pageNumber = ram->frames[frame].page_number;
@@ -193,14 +338,16 @@ void removeFromRAM(MEMORY *ram, int frame) {
     }
 }
 
-/*
- * Updates the least recently used (LRU) array in ram, according to the new most recently
+/**
+ * Updates the least recently used (LRU) array in RAM, according to the new most recently
  * used frame(mru), i.e. moves the frame 'mru' to the end of the array, sifting other frames
  * forward accordingly.
+ * @param ram
+ * @param mru
  */
 void updateLRU(MEMORY *ram, int mru) {
-    // the index corresponding to the most recently used frame
-    int lruIndex = 0;
+    
+    int lruIndex = 0;   // the index corresponding to the most recently used frame
     for (int i = 0; i < ram->num_frames; i++) {
         if (ram->LRU[i] == mru) {
             lruIndex = i;
@@ -211,13 +358,16 @@ void updateLRU(MEMORY *ram, int mru) {
     for (int i = lruIndex; i < (ram->num_frames - 1); i++) {
         ram->LRU[i] = ram->LRU[i + 1];
     }
-    // the most recently used frame is now at the end of the list
-    ram->LRU[ram->num_frames - 1] = mru;
+    
+    ram->LRU[ram->num_frames - 1] = mru;  // the most recently used frame is now at the end of the list
 }
 
-/*
- * Load one page from harddisk to ram, evicting the least recently used (LRU) frame
- * from ram in order to free up space.
+/**
+ * Load one page from HARDDISK to RAM, evicting the least recently used (LRU) frame
+ * from RAM in order to free up space.
+ * @param ram
+ * @param p
+ * @param jid
  */
 void loadPageToRAM(MEMORY *ram, PAGE p, int jid) {
     // find the frame that must be removed from ram and update its pagetable entry
@@ -231,8 +381,12 @@ void loadPageToRAM(MEMORY *ram, PAGE p, int jid) {
     updateLRU(ram, lru);
 }
 
-/*
+/**
  * Find and return the page in the harddrive associated with a specific line and job.
+ * @param harddrive
+ * @param jid
+ * @param line
+ * @return 
  */
 PAGE getPage(MEMORY *harddrive, int jid, int line) {
     int pagenum = pagetables[jid].pageIndex[line];
@@ -240,39 +394,48 @@ PAGE getPage(MEMORY *harddrive, int jid, int line) {
     return harddrive->frames[hdd_framenum];
 }
 
-/*
+/**
  * Add the specified page to the specified frame in the cache, updating the page table accordingly.
+ * @param cache
+ * @param p
+ * @param frame
+ * @param jid
  */
 void addToCache(MEMORY *cache, PAGE p, int frame, int jid) {
     cache->frames[frame] = p;
     pagetables[jid].cacheFrame[p.page_number] = frame;
 }
 
-/*
+/**
  * Find the pagetable corresponding to the page in 'frame' and update it to -1 to
- * effectively remove this page from cache. Note: the data in the frame will remain, so
- * this function should only be used in conjunction with a reallocation of this frame.
+ * remove this page from cache. Note: the data in the frame will remain, so
+ * this function should only be used in conjunction with a reallocation of the frame.
+ * @param cache
+ * @param frame
  */
 void removeFromCache(MEMORY *cache, int frame) {
     int pageNumber = cache->frames[frame].page_number;
 
-
     for (int i = 0; i < MAXJOBS; i++) {
         // find the relevant page table and update it
-
         if (pagetables[i].cacheFrame[pageNumber] == frame) {
             pagetables[i].cacheFrame[pageNumber] = -1;
         }
-
     }
 }
 
-/*
+/**
  * Load two pages from ram to cache and process the first line in the first page. If
  * there is only one page page of this job in ram, this will cause a page fault and
  * return false, but will load the second page into ram from disk. If there is only
  * on page of the job remaining, it will be loaded into the cache and true will be
  * return (as no page fault will be generated).
+ * @param harddrive
+ * @param ram
+ * @param cache
+ * @param jid
+ * @param frame
+ * @return 
  */
 bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, int frame) {
     // the current line (defined for conciseness)
@@ -327,153 +490,20 @@ bool processLineFromRAM(MEMORY *harddrive, MEMORY *ram, MEMORY *cache, int jid, 
     return true;
 }
 
-void loadJobFiles(char* file, MEMORY harddrive) {
-
-    FILE *fp = fopen(file, "r");
-    if (fp == NULL) {
-        DieWithSystemMessage("Unable to open Job-List file");
-    }
-
-    int jobID = 0;
-    int hdFrameCount = 0;
-    char jobFile[BUFSIZ];
-
-    while (fgets(jobFile, sizeof (jobFile), fp) != NULL) {
-
-        trimLine(jobFile);
-        FILE *fpJob = fopen(jobFile, "r");
-
-        if (fpJob == NULL) {
-            DieWithSystemMessage("Unable to open Job file");
-        }
-
-        char buffer[BUFSIZ];
 
 
-        int linecount = 0;
-        int pagecount = 0;
-
-        JOB newJob;
-        newJob.currentline = 1;
-        newJob.num_vars = 0;
-        newJob.jobID = jobID;
-        newJob.filename = strdup(jobFile);
-
-        //go through a job
-        while (fgets(buffer, sizeof (buffer), fpJob) != NULL) {
-            trimLine(buffer);
-
-            if (linecount == 0) {
-                newJob.start = atoi(buffer);
-                linecount++;
-                continue;
-
-            }
-
-            if (linecount % 2 != 0) {
-                //Create new page and add to harddrive
-                PAGE page;
-                page.data[0] = strdup(buffer);
-                page.page_number = pagecount;
-                //add page to harddrive
-                harddrive.frames[hdFrameCount] = page;
-
-                // update page table
-                pagetables[jobID].pageIndex[linecount] = pagecount;
-                pagetables[jobID].hdd_frameIndex[pagecount] = hdFrameCount;
-                pagetables[jobID].RAMFrame[pagecount] = -1;
-                pagetables[jobID].cacheFrame[pagecount] = -1;
-
-                pagecount++;
-                hdFrameCount++;
-            } else {
-                //Even line number
-                harddrive.frames[hdFrameCount - 1].data[1] = strdup(buffer);
-                pagetables[jobID].pageIndex[linecount] = pagecount - 1;
-            }
-
-            linecount++;
-        }
-
-        newJob.length = linecount - 1;
-
-        //Add to Job to queue of Jobs
-        enqueueJOBQ(newJob, todoJobs);
-
-        jobID++;
-
-        fclose(fpJob);
 
 
-    }
-
-    sortJOBQ(todoJobs);
-
-}
-
-void printResults(int *results, int end, char *sched) {
-
-    char* buffer = calloc(1, BUFSIZ);
-    char* result = calloc(1, BUFSIZ);
-    char* token = calloc(1, BUFSIZ);
-    char* placeholder = calloc(1, BUFSIZ);
-    char rrResults[MAXJOBS][BUFSIZ];
-
-    for (int i = 0; i < end; i++) {
-        if (results[i] == MAXJOBS) {
-            snprintf(buffer, 10, "%s", "X");
-        } else {
-            snprintf(buffer, 10, "%d", results[i]);
-        }
-
-        strcat(result, buffer);
-
-    }
-
-    printf(result);
-    printf("\n");
-
-
-    strcat(token, "X");
-    size_t start = 0;
-    size_t position = 0;
-    size_t length = 0;
-
-    while ((position = strspn(result, token)) != strlen(result)) {
-
-        start += position;
-        result += position;
-        strncpy(placeholder, result, 1);
-        length = strspn(result, placeholder);
-
-        if (!strcmp(sched, FCFS)) {
-            printf("%s %d %d\n", jobList[atoi(placeholder)].filename, start, start + length - 1);
-            strcat(token, placeholder);
-        }
-        if (!strcmp(sched, roundRobin)) {
-            snprintf(buffer, 10, "%d ", start);
-            strcat(rrResults[atoi(placeholder)], buffer);
-            strcat(placeholder, "X");
-            strcpy(token, placeholder);
-        }
-    }
-
-    if (!strcmp(sched, roundRobin)) {
-        int i = 0;
-        while (jobList[i].filename != NULL) {
-            printf("%s %s\n", jobList[i].filename, rrResults[i]);
-            i++;
-        }
-    }
-
-}
-
-/*
+/**
  * Finds the job associated with the specified frame in the specified memory
  * object. This will be either ram or cache, as specified by the 'ram' bool.
- *
  * After finding the job, this function creates a string of length 180 chars
  * and returns the memory dump of the specified frame in this string.
+ * @param m
+ * @param frame
+ * @param ram
+ * @param output
+ * @return 
  */
 bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
 
@@ -522,7 +552,7 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
     return true;
 }
 
-/*
+/**
  * Print out the current contents of RAM and cache to the output string.
  * If a frame is empty, it will still be included, but no lines or job numbers
  * will be listed, instead it will just say 'EMPTY' under the frame.
@@ -550,6 +580,10 @@ bool dumpFrame(MEMORY *m, int frame, bool ram, char *output) {
  * 		Frame 2: job 3
  * 		line1addaiado
  * 		line2iodaiodsa
+ * @param ram
+ * @param cache
+ * @param output
+ * @param firstJobStarted
  */
 void dumpMemory(MEMORY *ram, MEMORY *cache, char *output, bool firstJobStarted) {
     // start dumping RAM
@@ -594,32 +628,40 @@ void dumpMemory(MEMORY *ram, MEMORY *cache, char *output, bool firstJobStarted) 
     free(line);
 }
 
+/*========= SIMULATION FUNCTIONS =========*/
+
+
+
+/**
+ * Runs the execution of the simulation without any use of CACHE and RAM. It reads
+ * all JOBs into the HARDDRIVE.
+ * @param file
+ * @param sched
+ * @param timeQuant
+ */
 void simulateNoMemory(char* file, char* sched, int timeQuant) {
 
     MEMORY harddrive;
     harddrive.num_frames = MAXJOBS * MAX_PAGES;
     harddrive.frames = calloc(harddrive.num_frames, sizeof (PAGE));
 
-    loadJobFiles(file, harddrive);
+    loadJobFiles(file, harddrive); //Loads files into harddrive memory
 
-    int time = 1;
-    int count = 0;
-    int print[MAXTIME];
+    int time = 1; //Sets to 1
+    int count = 0; //Used for RR
+    int print[MAXTIME]; //Array of jobIDs being processed that are being indexed by time 
     for (int i = 0; i < MAXTIME; i++) {
         print[i] = MAXJOBS;
     }
-    bool rrUp = false;
+    bool rrUp = false; //Used to determine if RR count is up
 
+    //loops until there are no more JOBs to start and all jobs that have been created have finished processing
     while (!isEmptyJOBQ(todoJobs) || !isEmptyJOBQ(readyJobs)) {
-
+        //JOB is created and so is moved over into the readyJobs queue
         while (!isEmptyJOBQ(todoJobs) && peekJOBQ(todoJobs).start == time) {
-
             JOB newJob = dequeueJOBQ(todoJobs);
             jobList[newJob.jobID] = newJob;
             enqueueJOBQ(newJob, readyJobs);
-
-            //printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
-
         }
 
         //IDLE if no ready jobs
@@ -639,8 +681,7 @@ void simulateNoMemory(char* file, char* sched, int timeQuant) {
             continue;
         }
 
-
-        //Check for RR schedule
+        //Check for if RR time-quantum is up
         if (!strcmp(sched, roundRobin) && rrUp) {
             JOB next = dequeueJOBQ(readyJobs);
             enqueueJOBQ(next, readyJobs);
@@ -649,18 +690,15 @@ void simulateNoMemory(char* file, char* sched, int timeQuant) {
             continue;
         }
 
-
-
         //PROCESS line from HDD
-        int pagenum = pagetables[jid].pageIndex[j->currentline];
-        int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];
-        PAGE current_page = harddrive.frames[hdd_framenum];
+        int pagenum = pagetables[jid].pageIndex[j->currentline];   //The currentline indexes current page number in HDD
+        int hdd_framenum = pagetables[jid].hdd_frameIndex[pagenum];//pagenum indexes HDD frame in PAGETABLE
+        PAGE current_page = harddrive.frames[hdd_framenum];        //The current PAGE 
         char* line = current_page.data[(jobList[jid].currentline + 1) % 2]; //odd line is data[0]                              
-        processSingleLine(line, jid);
-        print[time] = jid;
-        time++;
-        count++;
-
+        processSingleLine(line, jid); //Process the line
+        print[time] = jid; //Update the printing
+        time++; //increment time
+        count++;//increment count
 
         //Check for timequantum
         if (!strcmp(sched, roundRobin) && count == timeQuant && j->currentline != j->length + 1) {
@@ -673,13 +711,16 @@ void simulateNoMemory(char* file, char* sched, int timeQuant) {
 
 }
 
-/*
+/**
  * Run a simulation with memory. This will use the default access times of 1 for cache memory
  * and 2 for RAM. The larger hard drive memory has no access cost, but will cause a page fault.
+ * @param file
+ * @param sched
+ * @param timeQuant
+ * @param memDump
+ * @param outFile
  */
 void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, char* outFile) {
-
-
 
     // initialise the three required memory objects and load the lines to harddrive
     MEMORY harddrive;
@@ -701,9 +742,8 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
         print[i] = MAXJOBS;
     }
 
-
-    // allocate a string to contain the output of this simulation
-    /* ASSUMPTION: the lines in all job files are, on average, less than 80 chars long
+    /* allocate a string to contain the output of this simulation
+     * ASSUMPTION: the lines in all job files are, on average, less than 80 chars long
      */
     char* output = calloc((MAXTIME / memDump * 10) * 220, sizeof (char));
 
@@ -720,8 +760,6 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
             JOB newJob = dequeueJOBQ(todoJobs);
             jobList[newJob.jobID] = newJob;
             enqueueJOBQ(newJob, readyJobs);
-
-            //printf("~~~~~~~~~~New process jid = %d came alive at time %d~~~~~~~~~~\n", newJob.jobID, time);
 
             // load the first two pages (four lines) of the new job from disk to ram
             for (int i = 0; i < 2; i++) {
@@ -751,12 +789,9 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
             //If Job is finished
             if (j->currentline == j->length + 1) {
                 dequeueJOBQ(readyJobs);
-
-                count = 0;
-                //printf("~~~~~~~~~~Process Died jid = %d at time %d~~~~~~~~~~\n", jid, time);
+                count = 0;                
                 continue;
             }
-
 
             //Check for RR schedule
             if (!strcmp(sched, roundRobin) && rrUp) {
@@ -767,20 +802,16 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
                 continue;
             }
 
-
-
             //PROCESS LINE FROM CACHE
             int frame;
             int pagenum = pagetables[jid].pageIndex[j->currentline];
             if ((frame = pagetables[jid].cacheFrame[pagenum]) != -1) {
-                if (!strcmp(sched, FCFS) || cache.accessCost <= timeQuant - count) {
+                //If schedule is FCFS or there is enough time in RR to process from CACHE
+                if (!strcmp(sched, FCFS) || cache.accessCost <= timeQuant - count) {                   
                     processLineFromCache(frame, &cache, jid);
                     // cost of processing from cache is 1 in the case of this project
-                    print[time] = jid;
-
-                    //printf("CACHE TIME: %d\n", time);					
+                    print[time] = jid;				
                     count++;
-
                     time++;
                     continue;
                 } else {
@@ -790,88 +821,88 @@ void simulateWithMemory(char* file, char* sched, int timeQuant, int memDump, cha
             } else {
                 //PROCESS LINE FROM RAM
                 if ((frame = pagetables[jid].RAMFrame[pagenum]) != -1) {
-
+                   //If schedule is FCFS or there is enough time in RR to process from CACHE
                     if (!strcmp(sched, FCFS) || ram.accessCost <= timeQuant - count) {
-                        // if process from ram was successful, increment time
+                        //If process from ram was successful, increment time
                         if (processLineFromRAM(&harddrive, &ram, &cache, jid, frame)) {
-                            // cost of filling cache and processing line is 2 in the case of this project
+                            //Cost of filling cache and processing line is 2 in the case of this project
                             print[time] = jid;
                             print[time + 1] = jid;
-
-                            //printf("RAM TIME: %d\n", time);
                             count += 2;
                             time++;
-                            // register that during the next iteration, nothing can be processed.
+                            //Indicates that during the next iteration, nothing can be processed.
                             ramAccess = true;
                             continue;
-                            // otherwise, if a page fault occurred, loop with no time increment (free to fill ram)
+                            //Otherwise, if a page fault occurred, loop with no time increment (free to fill RAM)
                         } else {
-                            // load the NEXT page from disk to ram
+                            //Load the NEXT page from HDD to RAM
                             loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum + 1]], jid);
-
                             rrUp = true;
                             continue;
                         }
                     } else {
-                        // if there isn't enough time to move new pages to cache, move on to next job
+                        //If there isn't enough time to move new pages to CACHE, move on to next JOB
                         rrUp = true;
                         continue;
                     }
-
                 } else {
-                    // load the page from disk to ram
+                    //Load the page from HDD to RAM
                     loadPageToRAM(&ram, harddrive.frames[pagetables[jid].hdd_frameIndex[pagenum]], jid);
-
-
                     rrUp = true;
                     continue;
                 }
             }
-
-
             //Check for timequantum
             if (!strcmp(sched, roundRobin) && count == timeQuant && j->currentline != j->length + 1) {
                 rrUp = true;
-
                 continue;
             }
-
-
-            // if loop was ignored due to ram access, increment time and reset to false
+            //If loop was ignored due to ram access, increment time and reset to false
         } else {
             ramAccess = false;
             time++;
         }
-
     }
-
-
     printResults(print, time, sched);
-
+    //Write to outFile for DUMP
     FILE *f;
     f = fopen(outFile, "w");
+    if (f == NULL) {       //Test that the outfile can be opened
+        DieWithSystemMessage("Unable to open outfile");
+    }
     fprintf(f, output);
     fclose(f);
+}
 
-
+void printIntro(){
+    printf("\nDavid Nathan 20356245 Daniel Hunt 20350022\n");
+    printf("\nCITS2230 Operating Systems.\nUsage:\n");
+    char *intro =
+            "\nPART 1\n"
+            "Project FCFS in.file\n"
+            "Project RR d in.file\n"
+            "\nPART 2/3\n"
+            "Project -m d1 FCFS in.file out.file\n"
+            "Project -m d1 RR d in.file out.file\n\n";
+    printf("%s", intro);
+    
 }
 
 int main(int argc, char *argv[]) {
-
+    
+    //Initialise Global Variables
     todoJobs = newJOBQ(MAXJOBS);
     readyJobs = newJOBQ(MAXJOBS);
 
     int timeQuant; //Time quantum for RR scheduling
-    int numJobs; //Number of Jobs
-    char* sched; //Type of schedule
-    char* file; //Name of file that contains jobs
+    char* sched;   //Type of schedule
+    char* file;    //Name of file that contains jobs
 
-
-    // based on the number of arguments, run the correct simulation
+    //Based on the number of arguments, run the correct simulation
     switch (argc) {
-
             // FCFS no memory
         case 3:
+            printIntro();
             sched = argv[1];
             if (strcmp(sched, roundRobin) == 0) {
                 DieWithUserMessage("Parameter(s)", "<Time Quantum>");
@@ -884,9 +915,9 @@ int main(int argc, char *argv[]) {
                 DieWithUserMessage("Parameter(s)", "<Schedule Type>");
             }
             break;
-
             // RR no memory
         case 4:
+            printIntro();
             sched = argv[1]; //Type of schedule
             if (strcmp(sched, roundRobin) == 0) {
                 timeQuant = atoi(argv[2]); //Set time quantum
@@ -896,9 +927,9 @@ int main(int argc, char *argv[]) {
                 DieWithUserMessage("Parameter(s)", "<Schedule Type>");
             }
             break;
-
             // FCFS with memory
         case 6:
+            printIntro();
             sched = argv[3]; //Type of schedule
             if (strcmp(sched, roundRobin) == 0) {
                 DieWithUserMessage("Parameter(s)", "<Time Quantum>");
@@ -917,9 +948,9 @@ int main(int argc, char *argv[]) {
                 DieWithUserMessage("Parameter(s)", "<Memory>");
             }
             break;
-
             // RR with memory
         case 7:
+            printIntro();
             sched = argv[3]; //Type of schedule
             if (strcmp(argv[1], "-m") == 0) {
                 if (strcmp(sched, roundRobin) == 0) {
@@ -935,9 +966,9 @@ int main(int argc, char *argv[]) {
                 DieWithUserMessage("Parameter(s)", "<Memory>");
             }
             break;
-
-            // otherwise wrong number of arguments, exit with error message
+            //Otherwise wrong number of arguments, exit with error message
         default:
+            printIntro();
             DieWithUserMessage("Parameter(s)", "<Schedule Type> <File>");
     }
 
